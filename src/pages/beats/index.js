@@ -1,0 +1,17 @@
+// src/pages/beats/index.js
+import Layout from '../../components/Layout';
+import BeatList from '../../components/BeatList';
+
+const beats = [
+  { id: 1, title: 'Quag', price: 29.99, cover: '/images/beats/beat1.png' },
+  { id: 2, title: 'bonix', price: 24.99, cover: '/images/beats/beat2.png' },
+];
+
+export default function Beats() {
+  return (
+    <Layout>
+      <h1 className="text-3xl my-6">All Beats</h1>
+      <BeatList beats={beats} />
+    </Layout>
+  );
+}
