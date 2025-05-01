@@ -1,183 +1,231 @@
-import { useState, useRef, useEffect } from 'react';
+import { useRef, useState, useEffect } from 'react';
+import { usePlayer } from '@/context/PlayerContext';
+import { useBeatQueue } from '@/context/BeatQueueContext';
+import BeatQueuePanel from './BeatQueuePanel';
+import { useLicenseModal } from '@/context/LicenseModalContext';
 
-export default function BeatPlayer({ beat }) {
-  const audioRef = useRef(null);
-  const canvasRef = useRef(null);
+export default function BeatPlayer() {
+  const {
+    currentBeat,
+    shouldAutoPlay,
+    setShouldAutoPlay,
+    playbackTime,
+    setPlaybackTime,
+    playBeat,
+  } = usePlayer();
+
+  const { shuffledQueue } = useBeatQueue();
+  const { openLicenseModal } = useLicenseModal(); // ✅ Added hook
+
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [volume, setVolume] = useState(1);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
-  const [volume, setVolume] = useState(1);
-  const [audioContext, setAudioContext] = useState(null);
-  const [analyser, setAnalyser] = useState(null);
-  const [dataArray, setDataArray] = useState(null);
-  const animationRef = useRef(null);
+  const [isExpanded, setIsExpanded] = useState(false);
 
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    
-    const setAudioData = () => setDuration(audio.duration);
-    const updateProgress = () => {
-      setCurrentTime(audio.currentTime);
-      setProgress((audio.currentTime / audio.duration) * 100);
-    };
-    
-    audio.addEventListener('loadedmetadata', setAudioData);
-    audio.addEventListener('timeupdate', updateProgress);
+  const audioRef = useRef(null);
 
-    return () => {
-      audio.removeEventListener('loadedmetadata', setAudioData);
-      audio.removeEventListener('timeupdate', updateProgress);
-      if (animationRef.current) cancelAnimationFrame(animationRef.current);
-      if (audioContext) audioContext.close();
-    };
-  }, [audioContext]);
-
-  const setupVisualization = () => {
-    if (!audioContext) {
-      const AudioContext = window.AudioContext || window.webkitAudioContext;
-      const context = new AudioContext();
-      const source = context.createMediaElementSource(audioRef.current);
-      const analyserNode = context.createAnalyser();
-
-      analyserNode.fftSize = 256;
-      source.connect(analyserNode);
-      analyserNode.connect(context.destination);
-
-      const bufferLength = analyserNode.frequencyBinCount;
-      const dataArray = new Uint8Array(bufferLength);
-
-      setAnalyser(analyserNode);
-      setAudioContext(context);
-      setDataArray(dataArray);
-
-      visualize();
-    }
-  };
-
-  const visualize = () => {
-    if (!canvasRef.current || !analyser) return;
-
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    const width = canvas.width;
-    const height = canvas.height;
-
-    analyser.getByteFrequencyData(dataArray);
-
-    ctx.clearRect(0, 0, width, height);
-
-    const barWidth = width / dataArray.length * 2;
-    let x = 0;
-
-    for (let i = 0; i < dataArray.length; i++) {
-      const barHeight = isPlaying ? dataArray[i] / 255 * height : height / 4;
-      const hue = i * 360 / dataArray.length;
-      ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
-      ctx.fillRect(x, height - barHeight, barWidth, barHeight);
-      x += barWidth + 1;
-    }
-
-    animationRef.current = requestAnimationFrame(visualize);
-  };
+  const activeBeat = currentBeat || shuffledQueue[currentIndex];
+  const audioUrl = activeBeat?.audioUrl;
+  const coverImage = activeBeat?.cover || '/images/beats/default-cover.png';
+  const title = activeBeat?.name || 'Untitled';
+  const artist = activeBeat?.artist || 'Anton Boss';
 
   const togglePlay = () => {
-    if (!audioContext) {
-      setupVisualization();
-    }
+    const audio = audioRef.current;
+    if (!audio) return;
+
     if (isPlaying) {
-      audioRef.current.pause();
+      audio.pause();
+      setIsPlaying(false);
     } else {
-      audioRef.current.play();
+      audio.play()
+        .then(() => setIsPlaying(true))
+        .catch(err => console.warn('Playback error:', err));
     }
-    setIsPlaying(!isPlaying);
+  };
+
+  const handleSeek = (e) => {
+    const newProgress = e.target.value;
+    const audio = audioRef.current;
+    if (audio) {
+      const newTime = (newProgress / 100) * duration;
+      audio.currentTime = newTime;
+      setProgress(newProgress);
+      setCurrentTime(newTime);
+      setPlaybackTime(newTime);
+    }
+  };
+
+  const handleVolume = (e) => {
+    const newVolume = parseFloat(e.target.value);
+    setVolume(newVolume);
+    if (audioRef.current) {
+      audioRef.current.volume = newVolume;
+    }
+  };
+
+  const skipNext = () => {
+    const nextIndex = currentIndex + 1;
+    if (nextIndex < shuffledQueue.length) {
+      setCurrentIndex(nextIndex);
+      playBeat(shuffledQueue[nextIndex]);
+      setShouldAutoPlay(true);
+    }
+  };
+
+  const skipBack = () => {
+    const prevIndex = currentIndex - 1;
+    if (prevIndex >= 0) {
+      setCurrentIndex(prevIndex);
+      playBeat(shuffledQueue[prevIndex]);
+      setShouldAutoPlay(true);
+    }
   };
 
   const formatTime = (time) => {
-    if (isNaN(time)) return "00:00";
+    if (isNaN(time)) return '00:00';
     const minutes = Math.floor(time / 60);
     const seconds = Math.floor(time % 60);
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   };
 
-  const handleSeek = (e) => {
-    const seekPosition = e.target.value;
-    audioRef.current.currentTime = (seekPosition / 100) * duration;
-    setProgress(seekPosition);
-  };
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !audioUrl) return;
 
-  const handleVolume = (e) => {
-    const volumeValue = e.target.value;
-    setVolume(volumeValue);
-    audioRef.current.volume = volumeValue;
-  };
+    const fullUrl = window.location.origin + audioUrl;
+    if (audio.src !== fullUrl) {
+      audio.src = audioUrl;
+      audio.load();
+
+      audio.onloadedmetadata = () => {
+        if (playbackTime > 0 && playbackTime < audio.duration) {
+          audio.currentTime = playbackTime;
+        }
+
+        if (shouldAutoPlay) {
+          audio.play()
+            .then(() => {
+              setIsPlaying(true);
+              setShouldAutoPlay(false);
+            })
+            .catch(err => {
+              console.warn('Autoplay failed:', err);
+              setIsPlaying(false);
+              setShouldAutoPlay(false);
+            });
+        }
+      };
+    }
+  }, [audioUrl]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !activeBeat) return;
+
+    const updateProgress = () => {
+      setCurrentTime(audio.currentTime);
+      setProgress((audio.currentTime / audio.duration) * 100);
+      setPlaybackTime(audio.currentTime);
+    };
+
+    const updateDuration = () => setDuration(audio.duration);
+
+    const handleEnded = () => {
+      if (currentIndex < shuffledQueue.length - 1) {
+        skipNext();
+      } else {
+        setIsPlaying(false);
+      }
+    };
+
+    audio.addEventListener('timeupdate', updateProgress);
+    audio.addEventListener('loadedmetadata', updateDuration);
+    audio.addEventListener('ended', handleEnded);
+
+    return () => {
+      audio.removeEventListener('timeupdate', updateProgress);
+      audio.removeEventListener('loadedmetadata', updateDuration);
+      audio.removeEventListener('ended', handleEnded);
+    };
+  }, [activeBeat, currentIndex]);
+
+  if (!activeBeat) return null;
 
   return (
-    <div className="w-full bg-gray-900 text-white flex items-center p-4 gap-4">
-      {/* Audio element */}
-      <audio ref={audioRef} src={beat.audioUrl} />
+    <div className="fixed bottom-0 left-0 w-full bg-gray-900 text-white z-50 shadow-xl">
+      <audio ref={audioRef} />
 
-      {/* Beat cover & info */}
-      <div className="flex items-center gap-4">
-        <div className="w-16 h-16 bg-gray-700 rounded-md overflow-hidden">
-          {/* If you have cover images later, insert <img src="..." /> here */}
-          <canvas ref={canvasRef} width={200} height={100} className="w-full h-full object-cover"></canvas>
-        </div>
-        <div>
-          <h4 className="text-lg font-bold">{beat.name}</h4>
-          <p className="text-sm text-gray-400">Anton Boss</p> {/* Hardcoded artist for now */}
-        </div>
-      </div>
-
-      {/* Play/Pause */}
-      <button
-        onClick={togglePlay}
-        className="bg-pink-600 hover:bg-pink-700 rounded-full p-2 flex items-center justify-center ml-4"
-      >
-        {isPlaying ? (
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6" />
-          </svg>
-        ) : (
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-          </svg>
-        )}
-      </button>
-
-      {/* Progress bar */}
-      <div className="flex flex-col flex-grow mx-4">
+      {/* Progress Bar */}
+      <div className="relative w-full h-1 bg-gray-800">
         <input
           type="range"
           value={progress}
           onChange={handleSeek}
-          className="w-full accent-pink-500"
+          className="absolute top-0 left-0 w-full h-1 appearance-none accent-pink-500"
         />
-        <div className="flex justify-between text-xs mt-1">
-          <span>{formatTime(currentTime)}</span>
-          <span>{formatTime(duration)}</span>
+      </div>
+
+      <div className="flex items-center justify-between px-4 py-3">
+        {/* Left: Track Info */}
+        <div className="flex items-center gap-4 min-w-[200px]">
+          <img src={coverImage} alt="Cover" className="w-12 h-12 rounded" />
+          <div>
+            <h4 className="font-bold">{title}</h4>
+            <p className="text-sm text-gray-400">{artist}</p>
+          </div>
+          <button
+            onClick={() => openLicenseModal(activeBeat)} // ✅ New price button
+            className="ml-2 bg-pink-400 hover:bg-pink-500 text-white font-bold py-1 px-3 text-sm rounded shadow"
+          >
+            From $24.99
+          </button>
+        </div>
+
+        {/* Center: Controls */}
+        <div className="flex flex-col items-center gap-1 flex-grow max-w-md">
+          <div className="flex gap-4 items-center">
+            <button onClick={skipBack}>⏮</button>
+            <button onClick={togglePlay}>{isPlaying ? '⏸' : '▶️'}</button>
+            <button onClick={skipNext}>⏭</button>
+          </div>
+          <div className="text-xs text-gray-400">
+            {formatTime(currentTime)} / {formatTime(duration)}
+          </div>
+        </div>
+
+        {/* Right: Volume + Queue */}
+        <div className="flex items-center gap-3 min-w-[120px]">
+          <span>🔊</span>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={volume}
+            onChange={handleVolume}
+            className="accent-purple-500"
+          />
+          <button onClick={() => setIsExpanded(prev => !prev)}>
+            {isExpanded ? '✕' : '☰'}
+          </button>
         </div>
       </div>
 
-      {/* Volume control */}
-      <input
-        type="range"
-        min={0}
-        max={1}
-        step={0.01}
-        value={volume}
-        onChange={handleVolume}
-        className="w-24 accent-purple-400"
-      />
-
-      {/* Cart Button */}
-      <div className="flex items-center gap-2">
-  <button className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">
-    ${beat.price.toFixed(2)}
-  </button>
-</div>
-
+      {isExpanded && (
+        <BeatQueuePanel
+          queue={shuffledQueue}
+          currentIndex={currentIndex}
+          onSelect={(i) => {
+            setCurrentIndex(i);
+            playBeat(shuffledQueue[i]);
+            setShouldAutoPlay(true);
+          }}
+        />
+      )}
     </div>
   );
 }

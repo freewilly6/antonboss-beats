@@ -22,6 +22,15 @@ export default function Home() {
             <h1 className="text-4xl font-bold text-black">Anton</h1>
             <h1 className="text-4xl font-bold text-black my-8">Boss</h1>
             </div>
+            
+             {/* sign in */}
+             <div className="absolute top-[18px] right-[233px]">
+  <Link href="/signin">
+    <button className="bg-white text-black hover:bg-gray-200 hover:scale-105 transform transition text-base p-2 rounded-full mt-4 cursor-pointer">
+      👤
+    </button>
+  </Link>
+</div>
 
           {/* Tracks and About buttons */}
           
