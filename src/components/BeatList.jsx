@@ -12,29 +12,33 @@ export default function BeatList({ beats }) {
 
   const { playBeat } = usePlayer();
   const { openLicenseModal } = useLicenseModal();
-
   const basePrice = 24.99;
 
-  const beatsWithAudio = beats.map(beat => ({
-    ...beat,
-    name: beat.title,
-    audioUrl: beat.audioUrl || `/audio/${beat.title.replace(/\s+/g, '')}.mp3`
-  }));
+  // Only include beats with a valid audio URL
+  const beatsWithAudio = (beats || [])
+    .filter((beat) => typeof beat === 'object' && beat !== null && (beat.audiourl || beat.audioUrl))
+    .map((beat) => ({
+      ...beat,
+      name: beat.name || beat.title || 'Untitled',
+      audioUrl: beat.audiourl || beat.audioUrl,
+    }));
 
+  // Filter logic
   const filteredBeats = beatsWithAudio.filter((beat) => {
     const search = searchTerm.toLowerCase();
     return (
-      beat.title.toLowerCase().includes(search) ||
-      beat.mood?.toLowerCase().includes(search) ||
-      beat.key?.toLowerCase().includes(search) ||
-      beat.artistType?.toLowerCase().includes(search)
-    ) &&
-    (!selectedMood || beat.mood === selectedMood) &&
-    (!selectedKey || beat.key === selectedKey);
+      (beat.name?.toLowerCase().includes(search) ||
+        beat.mood?.toLowerCase().includes(search) ||
+        beat.key?.toLowerCase().includes(search) ||
+        beat.artist?.toLowerCase().includes(search)) &&
+      (!selectedMood || beat.mood === selectedMood) &&
+      (!selectedKey || beat.key === selectedKey)
+    );
   });
 
   return (
     <div className="space-y-10">
+      {/* Search Input */}
       <input
         type="text"
         placeholder="Search beats, mood, key, artist..."
@@ -45,6 +49,7 @@ export default function BeatList({ beats }) {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-6">
+        {/* Mood Filter */}
         <div className="relative">
           <button
             onClick={() => setShowMoodDropdown(!showMoodDropdown)}
@@ -70,6 +75,7 @@ export default function BeatList({ beats }) {
           )}
         </div>
 
+        {/* Key Filter */}
         <div className="relative">
           <button
             onClick={() => setShowKeyDropdown(!showKeyDropdown)}
@@ -111,7 +117,7 @@ export default function BeatList({ beats }) {
       {/* Carousel */}
       <BeatCarousel beats={beatsWithAudio} />
 
-      {/* Search Results */}
+      {/* Filtered Beat Grid */}
       {(searchTerm || selectedMood || selectedKey) && (
         <div className="space-y-6">
           <h2 className="text-2xl font-bold mt-6">Search Results:</h2>
@@ -124,15 +130,15 @@ export default function BeatList({ beats }) {
                 >
                   <img
                     src={beat.cover || '/images/beats/default-cover.png'}
-                    alt={beat.title}
+                    alt={beat.name}
                     className="w-16 h-16 rounded object-cover cursor-pointer"
                     onClick={() => playBeat(beat)}
                   />
                   <div className="flex flex-col flex-grow">
-                    <h3 className="text-lg font-bold">{beat.title}</h3>
+                    <h3 className="text-lg font-bold">{beat.name}</h3>
                     <p className="text-gray-500 text-sm">
-                      {beat.mood} | {beat.key} | {beat.artistType}
-                    </p>
+  {beat.genre || 'N/A'} | {beat.mood || 'N/A'} | {beat.key || 'N/A'} | {beat.bpm ? `${beat.bpm} ` : 'N/A'} | {beat.artist || 'Unknown'}
+</p>
                   </div>
                   <button
                     onClick={(e) => {

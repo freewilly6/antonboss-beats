@@ -1,11 +1,11 @@
 import { useCart } from '@/context/CartContext';
 import { useLicenseModal } from '@/context/LicenseModalContext';
-import { useRouter } from 'next/router'; // ✅ import router
+import { useRouter } from 'next/router';
 
 export default function LicenseModal() {
   const { selectedBeat, closeLicenseModal } = useLicenseModal();
   const { addToCart } = useCart();
-  const router = useRouter(); // ✅ initialize router
+  const router = useRouter();
 
   if (!selectedBeat) return null;
 
@@ -17,6 +17,9 @@ export default function LicenseModal() {
     { name: 'Exclusive License', price: 'MAKE AN OFFER', terms: 'Negotiate' },
   ];
 
+  const beatTitle = selectedBeat.name || selectedBeat.title || 'Untitled';
+  const cover = selectedBeat.cover || '/images/beats/default-cover.png';
+
   return (
     <div className="fixed inset-0 z-50 bg-black bg-opacity-70 flex items-center justify-center px-4">
       <div className="bg-gray-900 text-white p-6 rounded-lg max-w-3xl w-full relative overflow-y-auto max-h-[90vh]">
@@ -26,14 +29,16 @@ export default function LicenseModal() {
         >
           ✕
         </button>
+
         <div className="flex items-center gap-4 mb-6">
           <img
-            src={selectedBeat.cover || '/images/beats/default-cover.png'}
-            alt={selectedBeat.title}
+            src={cover}
+            alt={beatTitle}
             className="w-20 h-20 object-cover rounded"
           />
-          <h2 className="text-2xl font-bold">{selectedBeat.title} — Choose License</h2>
+          <h2 className="text-2xl font-bold">{beatTitle} — Choose License</h2>
         </div>
+
         {licenses.map((license, idx) => (
           <div
             key={idx}
@@ -43,21 +48,25 @@ export default function LicenseModal() {
               <h4 className="font-semibold">{license.name}</h4>
               <p className="text-sm text-gray-400">{license.terms}</p>
             </div>
+
             <button
               className="bg-pink-300 text-black px-4 py-2 rounded font-bold hover:bg-pink-400 transition"
               onClick={() => {
                 if (license.name === 'Exclusive License') {
-                  closeLicenseModal();            // ✅ close modal first
-                  router.push('/contact');        // ✅ redirect to contact page
+                  closeLicenseModal();
+                  router.push('/contact');
                 } else {
-                  const newItem = {
+                  const item = {
                     id: `${selectedBeat.id}-${license.name}`,
-                    title: selectedBeat.title,
+                    name: beatTitle,
                     price: typeof license.price === 'number' ? license.price : 0,
-                    image: selectedBeat.cover || '/images/beats/default-cover.png',
-                    license: license.name,
+                    cover: cover,
+                    licenseType: license.name,
+                    audioUrl: selectedBeat.audioUrl || selectedBeat.audiourl || '',
+                    wav: selectedBeat.wav || '',
+                    stems: selectedBeat.stems || '',
                   };
-                  addToCart(newItem);
+                  addToCart(item);
                   closeLicenseModal();
                 }
               }}

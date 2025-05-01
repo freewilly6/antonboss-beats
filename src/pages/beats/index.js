@@ -1,25 +1,22 @@
-// src/pages/beats/index.js
+// pages/beats/index.js
 import Layout from '../../components/Layout';
 import BeatList from '../../components/BeatList';
-import { beatsData } from '../../data/beats'; // import beats here
+import { useEffect, useState } from 'react';
+import { supabase } from '../../lib/supabaseClient';
 
-// Your local beats data
-const beats = [
-  { id: 1, title: 'Quag', price: 29.99, cover: '/images/beats/beat1.png', bpm: 140, mood: 'Dark', key: 'C Minor', artistType: 'Travis Scott' },
-  { id: 2, title: 'Bonix', price: 24.99, cover: '/images/beats/beat2.png', bpm: 130, mood: 'Chill', key: 'A Minor', artistType: 'Drake' },
-];
+export default function BeatsPage() {
+  const [beats, setBeats] = useState([]);
 
-// Static Generation function
-export async function getStaticProps() {
-  return {
-    props: {
-      beats,
-    },
-  };
-}
+  useEffect(() => {
+    const fetchBeats = async () => {
+      const { data, error } = await supabase.from('BeatFiles').select('*');
+      if (error) console.error('Error loading beats:', error);
+      else setBeats(data);
+    };
 
-// Main Beats Page
-export default function Beats({ beats }) {
+    fetchBeats();
+  }, []);
+
   return (
     <Layout>
       <div className="mt-10">

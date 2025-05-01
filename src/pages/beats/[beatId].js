@@ -1,35 +1,9 @@
-// pages/beats/[beatid].js
 import Layout from '../../components/Layout';
 import { useRouter } from 'next/router';
 import { useState, useEffect } from 'react';
+import { supabase } from '../../lib/supabaseClient';
 import { useCart } from '../../context/CartContext';
 import { usePlayer } from '../../context/PlayerContext';
-
-const beats = [
-  {
-    id: 'quag',
-    title: 'Quag',
-    price: 29.99,
-    audioUrl: '/audio/Quag.mp3',
-    description: 'A trap beat with heavy 808s and melodic elements',
-    bpm: 140,
-    key: 'F minor',
-    cover: '/images/quag.jpg',
-    artist: 'Travis Scott',
-  },
-  {
-    id: 'bonix',
-    title: 'Bonix',
-    price: 24.99,
-    audioUrl: '/audio/Bonix.mp3',
-    description: 'Energetic trap beat with hard drums and eerie melodies',
-    bpm: 130,
-    key: 'A minor',
-    cover: '/images/bonix.jpg',
-    artist: 'Drake',
-  },
-  // Add more beats as needed
-];
 
 export default function BeatDetail() {
   const router = useRouter();
@@ -38,24 +12,42 @@ export default function BeatDetail() {
   const { playBeat } = usePlayer();
 
   const [beatData, setBeatData] = useState(null);
-  const [hueRotate, setHueRotate] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [hueRotate, setHueRotate] = useState(0);
 
   useEffect(() => {
-    const beat = beats.find(b => b.id === beatid);
-    if (beat) {
-      setBeatData(beat);
-    }
+    if (!beatid) return;
+
+    const fetchBeat = async () => {
+      const { data, error } = await supabase
+        .from('BeatFiles')
+        .select('*')
+        .eq('id', beatid)
+        .single();
+
+      if (error) {
+        console.error('Error fetching beat:', error);
+        setLoading(false);
+        return;
+      }
+
+      setBeatData(data);
+      setLoading(false);
+    };
+
+    fetchBeat();
   }, [beatid]);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setHueRotate(prev => (prev + 1) % 360);
+      setHueRotate((prev) => (prev + 1) % 360);
     }, 100);
     return () => clearInterval(interval);
   }, []);
 
-  if (!beatData) return <div className="text-center py-20">Loading...</div>;
+  if (loading) return <div className="text-center py-20">Loading...</div>;
+  if (!beatData) return <div className="text-center py-20">Beat not found</div>;
 
   const licenses = [
     { name: 'Basic License', price: 24.99, terms: 'MP3 | Personal Use' },
@@ -80,59 +72,73 @@ export default function BeatDetail() {
               {beatData.artist} Type Beat
             </h2>
             <h1 className="text-6xl font-black mb-4 text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-pink-500 to-purple-500">
-              {beatData.title}
+              {beatData.name}
             </h1>
             <div className="flex justify-center items-center gap-6 text-lg">
-              <span className="text-cyan-300 font-mono font-bold">BPM: {beatData.bpm}</span>
-              <span className="text-pink-300 font-mono font-bold">Key: {beatData.key}</span>
+              <span className="text-cyan-300 font-mono font-bold">BPM: {beatData.bpm || 'N/A'}</span>
+              <span className="text-pink-300 font-mono font-bold">Key: {beatData.key || 'Unknown'}</span>
             </div>
           </div>
 
-          {/* ✅ Trigger player from context */}
           <div className="text-center mb-6">
             <button
               onClick={() =>
                 playBeat({
-                  name: beatData.title,
-                  audioUrl: beatData.audioUrl,
+                  name: beatData.name,
+                  audioUrl: beatData.audiourl,
                   cover: beatData.cover,
                   artist: beatData.artist,
-                  price: beatData.price,
+                  price: beatData.price || 24.99,
                 })
               }
               className="inline-block px-8 py-4 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white rounded-full font-bold text-xl"
             >
-              ▶️ Play {beatData.title}
+              ▶️ Play {beatData.name}
             </button>
           </div>
 
           <p className="my-6 text-lg font-medium text-white text-center max-w-xl mx-auto">
-            {beatData.description}
+            {beatData.description || 'No description available for this beat.'}
           </p>
 
-          {/* Price Trigger */}
           <div className="text-center my-8">
             <button
-              onClick={() => setShowModal(true)}
+              onClick={() => {
+                addToCart({
+                  id: `${beatData.id}-Default License`,
+                  name: beatData.name,
+                  price: beatData.price || 24.99,
+                  licenseType: 'Default License',
+                  cover: beatData.cover,
+                  audioUrl: beatData.audioUrl || beatData.audiourl || '',
+                  wav: beatData.wav || '',
+                  stems: beatData.stems || '',
+                });
+                router.push('/cart');
+              }}
               className="inline-block px-8 py-4 rounded-full transform rotate-3 hover:rotate-0 transition-all"
               style={{
                 background: 'linear-gradient(45deg, #ff00cc, #3333ff)',
                 boxShadow: '0 0 20px #ff00cc, 0 0 40px #3333ff',
               }}
             >
-              <span className="text-2xl font-black text-white">${beatData.price}</span>
+              <span className="text-2xl font-black text-white">${beatData.price || 24.99}</span>
             </button>
           </div>
 
-          {/* Add to Cart */}
           <div className="mt-8 text-center">
             <button
               className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold py-4 px-12 rounded-full text-xl uppercase tracking-wider transition-all hover:scale-105 hover:rotate-1 border border-white border-opacity-20"
               onClick={() => {
                 addToCart({
-                  beatTitle: beatData.title,
-                  licenseType: 'Default',
-                  price: beatData.price,
+                  id: `${beatData.id}-Default License`,
+                  name: beatData.name,
+                  price: beatData.price || 24.99,
+                  licenseType: 'Default License',
+                  cover: beatData.cover,
+                  audioUrl: beatData.audioUrl || beatData.audiourl || '',
+                  wav: beatData.wav || '',
+                  stems: beatData.stems || '',
                 });
                 router.push('/cart');
               }}
@@ -142,12 +148,10 @@ export default function BeatDetail() {
           </div>
         </div>
 
-        {/* Floating Background Elements */}
         <div className="absolute top-4 right-4 w-32 h-32 rounded-full bg-pink-600 blur-3xl opacity-30 animate-bounce"></div>
         <div className="absolute bottom-8 left-8 w-40 h-40 rounded-full bg-purple-600 blur-3xl opacity-30 animate-pulse"></div>
       </div>
 
-      {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-70 px-4">
           <div className="bg-gray-900 text-white p-6 rounded-lg max-w-3xl w-full relative overflow-y-auto max-h-[90vh]">
@@ -159,14 +163,12 @@ export default function BeatDetail() {
             </button>
 
             <div className="flex flex-col md:flex-row gap-6">
-              {/* Artwork */}
               <div className="flex-shrink-0">
                 <img src={beatData.cover} alt="Beat Cover" className="rounded w-40 h-40 object-cover" />
-                <h3 className="text-lg font-bold mt-2">{beatData.title}</h3>
+                <h3 className="text-lg font-bold mt-2">{beatData.name}</h3>
                 <p className="text-sm text-gray-400">{beatData.artist}</p>
               </div>
 
-              {/* License Options */}
               <div className="flex-grow space-y-4">
                 {licenses.map((license, index) => (
                   <div
@@ -180,9 +182,14 @@ export default function BeatDetail() {
                     <button
                       onClick={() => {
                         addToCart({
-                          beatTitle: beatData.title,
+                          id: `${beatData.id}-${license.name}`,
+                          name: beatData.name,
+                          price: license.price || beatData.price || 24.99,
                           licenseType: license.name,
-                          price: license.price,
+                          cover: beatData.cover,
+                          audioUrl: beatData.audioUrl || beatData.audiourl || '',
+                          wav: beatData.wav || '',
+                          stems: beatData.stems || '',
                         });
                         setShowModal(false);
                         router.push('/cart');

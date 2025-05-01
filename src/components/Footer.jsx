@@ -1,9 +1,7 @@
 // src/components/Footer.jsx
 import Link from 'next/link';
 import { usePlayer } from '../context/PlayerContext';
-import BeatPlayer from './BeatPlayer';
 import { useState, useRef, useEffect } from 'react';
-
 
 export default function Footer() {
   const { currentBeat } = usePlayer();
@@ -32,14 +30,22 @@ export default function Footer() {
       <footer className="bg-gray-900 text-gray-400 mt-16">
         {/* Footer Links */}
         <div className="container mx-auto px-4 py-10 grid grid-cols-1 sm:grid-cols-3 gap-6">
-          <div className="text-xl font-bold text-indigo-300">
-            ANTONBOSS
-          </div>
+          <div className="text-xl font-bold text-indigo-300">ANTONBOSS</div>
+
           <nav className="flex flex-col">
             <Link href="/" className="hover:text-white">Home</Link>
-            <Link href="/beats" className="hover:text-white">Beats</Link> 
+            <Link href="/beats" className="hover:text-white">Beats</Link>
             <Link href="/contact" className="hover:text-white">Contact</Link>
+            <Link
+  href="https://www.youtube.com/@AntonBoss-pd"
+  className="hover:text-white underline text-sm"
+  target="_blank"
+  rel="noopener noreferrer"
+>
+  YouTube
+</Link>
           </nav>
+
           <nav className="flex flex-col">
             <button
               onClick={() => setShowTerms(true)}
@@ -55,19 +61,8 @@ export default function Footer() {
             </button>
             <Link href="/license" className="hover:text-white">Licensing Info</Link>
           </nav>
-          <nav className="flex flex-col">
-            <Link
-              href="https://www.youtube.com/@AntonBoss-pd"
-              className="hover:text-white"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Youtube
-            </Link>
-          </nav>
         </div>
 
-        {/* Bottom copyright */}
         <div className="text-center text-sm mt-8 pb-4">
           &copy; {new Date().getFullYear()} AntonBoss. All Rights Reserved.
         </div>
@@ -90,7 +85,7 @@ export default function Footer() {
             <p className="text-xl font-bold mb-4 text-pink-200">https://Antonboss.com Privacy Policy</p>
             <p className="text-sm text-gray-400 mb-4">Effective date: May 8 2025</p>
             <p className="mb-4">
-              <strong>Anton("Website", "us", "we", or "our")</strong> are committed to protecting your privacy online...
+              <strong>Anton ("Website", "us", "we", or "our")</strong> are committed to protecting your privacy online...
             </p>
             <p className="mb-4">We operate the Website and other related websites and applications (the "Service").</p>
             <p className="mb-4">This page informs you of our policies regarding the collection, use, and disclosure of personal data...</p>

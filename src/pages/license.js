@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 
@@ -32,11 +32,37 @@ const licenses = [
 
 export default function Licensing() {
   const [selectedLicense, setSelectedLicense] = useState(null);
+  const modalRef = useRef();
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (modalRef.current && !modalRef.current.contains(event.target)) {
+        setSelectedLicense(null);
+      }
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') {
+        setSelectedLicense(null);
+      }
+    }
+
+    if (selectedLicense) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleKeyDown);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectedLicense]);
 
   return (
-    <div className="bg-black text-pink-200 min-h-screen">
+    <div className="bg-black text-pink-200 flex flex-col min-h-screen">
       <Navbar />
-      <main className="py-16 px-4 max-w-7xl mx-auto">
+
+      <main className="flex-grow pt-28 px-4 max-w-7xl mx-auto">
         <h1 className="text-center text-4xl font-bold mb-12">Licensing Info</h1>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-8 text-center">
           {licenses.map((license, index) => (
@@ -72,7 +98,10 @@ export default function Licensing() {
       {/* Modal */}
       {selectedLicense && (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
-          <div className="bg-gray-800 text-white max-w-2xl w-full p-6 rounded-lg shadow-lg relative overflow-y-auto max-h-[80vh]">
+          <div
+            ref={modalRef}
+            className="bg-gray-800 text-white max-w-2xl w-full p-6 rounded-lg shadow-lg relative overflow-y-auto max-h-[80vh]"
+          >
             <button
               onClick={() => setSelectedLicense(null)}
               className="absolute top-4 right-4 text-xl text-white hover:text-pink-400"

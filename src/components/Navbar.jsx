@@ -2,9 +2,16 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useCart } from '../context/CartContext';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
+  const [user, setUser] = useState(null);
   const { getTotal } = useCart();
 
   useEffect(() => {
@@ -12,6 +19,27 @@ export default function Navbar() {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+    };
+    getUser();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null);
+    });
+
+    return () => {
+      authListener.subscription?.unsubscribe();
+    };
+  }, []);
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+  };
 
   return (
     <nav
@@ -33,7 +61,25 @@ export default function Navbar() {
             ${getTotal().toFixed(2)}
           </span>
         </Link>
-        <Link href="/signin" className="hover:scale-110 transition text-2xl">🧑‍🦯</Link>
+
+        {/* Auth */}
+        {!user ? (
+          <Link href="/signin" className="hover:scale-110 transition text-2xl">🧑‍🦯</Link>
+        ) : (
+          <div className="flex items-center gap-3">
+            <img
+              src={user.user_metadata?.avatar_url || '/images/user-default.png'}
+              alt="User Avatar"
+              className="w-8 h-8 rounded-full object-cover"
+            />
+            <button
+              onClick={handleSignOut}
+              className="text-sm bg-gray-200 hover:bg-gray-300 rounded px-3 py-1"
+            >
+              Sign Out
+            </button>
+          </div>
+        )}
       </div>
     </nav>
   );
