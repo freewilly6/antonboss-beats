@@ -46,7 +46,7 @@ export default function DownloadsPage() {
 
   if (loading) return null;
 
-  const allBeats = purchases.flatMap(p => p.beats || []);
+  const allBeats = purchases.flatMap((p) => p.beats || []);
 
   const renderDownloads = (beat) => {
     const license = (beat.license || '').toLowerCase();
@@ -79,7 +79,7 @@ export default function DownloadsPage() {
         <h1 className="text-3xl font-bold mb-6">Your Downloads</h1>
 
         {allBeats.length === 0 ? (
-          <p className="text-gray-600">You haven't purchased any beats yet.</p>
+          <p className="text-gray-600">You haven&apos;t purchased any beats yet.</p>
         ) : (
           <div className="space-y-4">
             {allBeats.map((beat, index) => (
