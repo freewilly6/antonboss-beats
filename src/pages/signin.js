@@ -16,7 +16,8 @@ export default function SignIn() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/signin?redirectTo=${redirectTo}`,
+        // ✅ Send user directly to the destination, not back to /signin
+        redirectTo: `${window.location.origin}${redirectTo}`,
       },
     });
 
@@ -30,7 +31,7 @@ export default function SignIn() {
       const { data, error } = await supabase.auth.getSession();
 
       if (data?.session) {
-        // Clean up hash fragment from URL
+        // ✅ Clean up the URL hash fragment from Supabase
         if (window.location.hash) {
           window.history.replaceState(null, '', window.location.pathname);
         }
@@ -46,7 +47,6 @@ export default function SignIn() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[url('/images/signinbk.png')] bg-cover bg-center relative">
-      
       {/* 🔙 Back Arrow */}
       <button
         onClick={() => {
