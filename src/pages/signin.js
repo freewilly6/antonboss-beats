@@ -1,3 +1,4 @@
+// pages/signin.js
 import { useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { createClient } from '@supabase/supabase-js';
@@ -15,7 +16,7 @@ export default function SignIn() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}${redirectTo}`,
+        redirectTo: `${window.location.origin}/signin?redirectTo=${redirectTo}`,
       },
     });
 
@@ -24,11 +25,23 @@ export default function SignIn() {
     }
   };
 
-  // Auto-redirect if already signed in
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) router.push(redirectTo);
-    });
+    const handleRedirect = async () => {
+      const { data, error } = await supabase.auth.getSession();
+
+      if (data?.session) {
+        // Clean up hash fragment from URL
+        if (window.location.hash) {
+          window.history.replaceState(null, '', window.location.pathname);
+        }
+
+        router.push(redirectTo);
+      } else if (error) {
+        console.error('❌ Session fetch error:', error.message);
+      }
+    };
+
+    handleRedirect();
   }, [router, redirectTo]);
 
   return (
