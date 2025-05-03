@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Listbox } from '@headlessui/react';
-import { CheckIcon } from '@heroicons/react/solid';
+import { CheckIcon } from '@heroicons/react/20/solid';
 import { usePlayer } from '../context/PlayerContext';
 import BeatCarousel from './BeatCarousel';
 import { useLicenseModal } from '@/context/LicenseModalContext';
@@ -126,7 +126,7 @@ export default function BeatList({ beats }) {
               {selectedKey || 'Filter Key'}
             </Listbox.Button>
             <Listbox.Options className="absolute mt-1 w-40 bg-white border rounded-lg shadow-lg z-10">
-              {['C Minor','A Minor','G Major','D Major'].map(k => (
+              {['A Minor','B Minor','C Minor','D Minor','E Minor','F Minor', 'G Minor'].map(k => (
                 <Listbox.Option
                   key={k}
                   value={k}
