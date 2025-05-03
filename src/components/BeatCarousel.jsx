@@ -12,15 +12,14 @@ export default function BeatCarousel({ beats }) {
 
   const handleSelectBeat = (beat) => {
     const currentUrl = currentBeat?.audioUrl || currentBeat?.audiourl;
-    const beatUrl = beat.audioUrl || beat.audiourl;
-
+    const beatUrl    = beat.audioUrl   || beat.audiourl;
     if (currentUrl === beatUrl) return;
 
     playBeat({
-      name: beat.name || beat.title || 'Untitled',
+      name:     beat.name || beat.title || 'Untitled',
       audioUrl: beatUrl,
-      cover: beat.cover || '/images/beats/default-cover.png',
-      artist: beat.artistType || beat.artist || 'Anton Boss',
+      cover:    beat.cover || '/images/beats/default-cover.png',
+      artist:   beat.artistType || beat.artist || 'Anton Boss',
     });
   };
 
@@ -33,10 +32,10 @@ export default function BeatCarousel({ beats }) {
         centeredSlides
         slidesPerView="auto"
         coverflowEffect={{
-          rotate: 0,
-          stretch: 0,
-          depth: 150,
-          modifier: 2.5,
+          rotate:       0,
+          stretch:      0,
+          depth:        150,
+          modifier:     2.5,
           slideShadows: false,
         }}
         navigation
@@ -45,38 +44,45 @@ export default function BeatCarousel({ beats }) {
         {beats.map((beat) => {
           const title = beat.name || beat.title || 'Untitled';
           const cover = beat.cover || '/images/beats/default-cover.png';
-
-          // Build info line with |
           const infoParts = [
             beat.genre,
             beat.mood,
             beat.key,
             beat.bpm ? `${beat.bpm}` : null,
             beat.artistType || beat.artist,
-          ].filter(Boolean); // Remove undefined/null
+          ].filter(Boolean);
 
           return (
             <SwiperSlide
               key={beat.id}
-              style={{ width: '300px', height: '460px' }}
               onClick={() => handleSelectBeat(beat)}
-              className="flex flex-col items-center justify-start cursor-pointer space-y-2"
+              className="flex-shrink-0 cursor-pointer"
+              style={{ width: 300 /* keep slide width at 300px */ }}
             >
-              <Image
-                src={cover}
-                alt={title}
-                width={300}
-                height={300}
-                className="rounded-xl object-cover"
-              />
-              {infoParts.length > 0 && (
-                <div className="text-sm text-gray-500 mt-2 text-center">
-                  {infoParts.join(' | ')}
+              {/* Center everything vertically in the slide */}
+              <div className="flex flex-col items-center">
+                {/* 300×300 cover container */}
+                <div className="relative w-[300px] h-[300px] rounded-xl overflow-hidden">
+                  <Image
+                    src={cover}
+                    alt={title}
+                    fill
+                    className="object-cover"
+                  />
                 </div>
-              )}
-              <h2 className="text-black text-2xl font-bold text-center mt-3">
-                {title}
-              </h2>
+
+                {/* metadata & title below */}
+                <div className="mt-4 text-center space-y-1">
+                  {infoParts.length > 0 && (
+                    <p className="text-sm text-gray-500">
+                      {infoParts.join(' | ')}
+                    </p>
+                  )}
+                  <h2 className="text-black text-2xl font-bold">
+                    {title}
+                  </h2>
+                </div>
+              </div>
             </SwiperSlide>
           );
         })}
