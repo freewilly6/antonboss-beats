@@ -74,8 +74,8 @@ export default function AboutPage() {
       <div className="text-black p-8">
         <h1 className="text-4xl font-bold mb-6">About Me</h1>
         <p className="mb-10 text-lg">
-         Just your average noise making enjoyer. If you haven't already check out my Youtube Channel for my remixes, or have fun with drum pad below!
-        </p>
+  Just your average noise making enjoyer. If you haven&apos;t already check out my YouTube Channel for my remixes, or have fun with drum pad below!
+</p>
         <DrumPad />
       </div>
     </Layout>
