@@ -1,3 +1,4 @@
+// src/pages/cart.js
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { createClient } from '@supabase/supabase-js';
@@ -12,22 +13,31 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
+const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+
 export default function CartPage() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [purchaseComplete, setPurchaseComplete] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
+
   const router = useRouter();
   const { cart, removeFromCart, getTotal, clearCart } = useCart();
-
   const isEmpty = cart.length === 0;
 
   useEffect(() => {
     const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
       if (!session) {
         router.push(`/signin?redirectTo=/cart`);
       } else {
-        setUser(session.user);
+        const u = session.user;
+        setUser(u);
+        setIsAdmin(u.email === ADMIN_EMAIL);
         setLoading(false);
       }
     };
@@ -36,26 +46,47 @@ export default function CartPage() {
   }, [router]);
 
   const storePurchase = async (paypalDetails) => {
-    if (!user) return;
+    if (!user || cart.length === 0) return;
 
-    const { error } = await supabase.from('purchases').insert({
+    // 1) fetch the full beat files for every item in the cart
+    const beatIds = cart.map((item) => item.id);
+    const { data: selectedBeats, error: fetchError } = await supabase
+      .from('BeatFiles')
+      .select('id, name, licenseType, audioUrl, wav, stems')
+      .in('id', beatIds);
+
+    if (fetchError) {
+      console.error('❌ Failed to fetch BeatFiles:', fetchError.message);
+      return;
+    }
+
+    // 2) build the JSON payload, merging in price & cover from cart
+    const beatsPayload = selectedBeats.map((b) => {
+      const cartItem = cart.find((c) => c.id === b.id) || {};
+      return {
+        id: b.id,
+        name: b.name,
+        license: b.licenseType || 'Default License',
+        audioUrl: b.audioUrl,
+        wav: b.wav,
+        stems: b.stems,
+        cover: cartItem.cover,
+        price: cartItem.price ?? cartItem.defaultPrice ?? 0,
+      };
+    });
+
+    // 3) insert the purchase row with the enriched JSON
+    const { error: insertError } = await supabase.from('purchases').insert({
       user_id: user.id,
       email: user.email,
-      beats: cart.map((item) => ({
-        id: item.id,
-        name: item.name || item.title,
-        audioUrl: item.audioUrl || item.audiourl,
-        cover: item.cover,
-        license: item.licenseType || 'Default License',
-        price: item.price || 24.99,
-      })),
+      beats: beatsPayload,
       total: getTotal(),
       paypal_transaction_id: paypalDetails.id,
       created_at: new Date().toISOString(),
     });
 
-    if (error) {
-      console.error('❌ Failed to store purchase in Supabase:', error.message);
+    if (insertError) {
+      console.error('❌ Failed to store purchase in Supabase:', insertError.message);
     }
   };
 
@@ -64,6 +95,7 @@ export default function CartPage() {
   return (
     <>
       <Navbar />
+
       <div className="p-6 bg-gray-20 text-black min-h-screen">
         <h1 className="text-3xl mb-6 font-bold">Your Cart</h1>
 
@@ -77,10 +109,10 @@ export default function CartPage() {
                   item.name && item.title && item.name !== item.title
                     ? `${item.name} (${item.title})`
                     : item.name || item.title || 'Untitled';
-
                 const cover = item.cover || '/images/beats/default-cover.png';
                 const license = item.licenseType || 'Default License';
-                const price = typeof item.price === 'number' ? item.price : 24.99;
+                const price =
+                  typeof item.price === 'number' ? item.price : 24.99;
 
                 return (
                   <div
@@ -99,7 +131,9 @@ export default function CartPage() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="font-bold text-pink-600">${price.toFixed(2)}</p>
+                      <p className="font-bold text-pink-600">
+                        ${price.toFixed(2)}
+                      </p>
                       <button
                         onClick={() => removeFromCart(item.id)}
                         className="text-sm text-red-600 hover:underline mt-1"
@@ -115,34 +149,36 @@ export default function CartPage() {
             <div className="mt-8 text-right">
               <h2 className="text-2xl font-bold">
                 Subtotal before taxes:{' '}
-                <span className="text-green-600">${getTotal().toFixed(2)}</span>
+                <span className="text-green-600">
+                  ${getTotal().toFixed(2)}
+                </span>
               </h2>
 
               <div className="mt-6 max-w-xs ml-auto">
                 <PayPalButtons
-                  style={{ layout: "horizontal" }}
-                  createOrder={(data, actions) => {
-                    return actions.order.create({
+                  style={{ layout: 'horizontal' }}
+                  createOrder={(data, actions) =>
+                    actions.order.create({
                       purchase_units: [
                         {
-                          amount: {
-                            value: getTotal().toFixed(2),
-                          },
-                          description: "AntonBoss Beat Purchase",
+                          amount: { value: getTotal().toFixed(2) },
+                          description: 'Your Beat Purchase',
                         },
                       ],
-                    });
-                  }}
+                    })
+                  }
                   onApprove={async (data, actions) => {
                     const details = await actions.order.capture();
-                    console.log("✅ Payment successful!", details);
+                    console.log('✅ Payment successful!', details);
+
                     await storePurchase(details);
-                    clearCart(); // Clear cart after successful payment
+                    clearCart();
+                    setPurchaseComplete(true);
                     setShowConfirmation(true);
                   }}
                   onError={(err) => {
-                    console.error("❌ PayPal error:", err);
-                    alert("Payment failed. Try again.");
+                    console.error('❌ PayPal error:', err);
+                    alert('Payment failed. Try again.');
                   }}
                 />
               </div>
@@ -150,14 +186,23 @@ export default function CartPage() {
           </>
         )}
       </div>
+
       <Footer />
 
-      {/* ✅ Confirmation Modal */}
+      {/* Confirmation Modal */}
       {showConfirmation && (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
           <div className="bg-white p-8 rounded-lg shadow-xl text-center max-w-sm w-full">
-            <h2 className="text-2xl font-bold text-green-600 mb-4">Purchase Successful!</h2>
+            <h2 className="text-2xl font-bold text-green-600 mb-4">
+              Purchase Successful!
+            </h2>
             <p className="mb-4">Your beats are now available for download.</p>
+            <button
+              onClick={() => setShowConfirmation(false)}
+              className="bg-gray-200 hover:bg-gray-300 text-black font-semibold px-6 py-2 rounded mr-2"
+            >
+              Close
+            </button>
             <button
               onClick={() => {
                 setShowConfirmation(false);
@@ -170,7 +215,18 @@ export default function CartPage() {
           </div>
         </div>
       )}
+
+      {/* Persistent Downloads Button */}
+      {purchaseComplete && !showConfirmation && (
+        <div className="fixed bottom-4 right-4 z-50">
+          <button
+            onClick={() => router.push('/downloads')}
+            className="bg-pink-500 hover:bg-pink-600 text-white font-semibold px-6 py-3 rounded-full shadow-lg"
+          >
+            My Downloads
+          </button>
+        </div>
+      )}
     </>
   );
-  
 }
