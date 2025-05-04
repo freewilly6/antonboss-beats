@@ -55,7 +55,10 @@ export default function AdminPage() {
   }, [message]);
 
   const fetchBeatFiles = async () => {
-    const { data, error } = await supabase.from('BeatFiles').select('*');
+    const { data, error } = await supabase
+      .from('BeatFiles')
+      .select('*')
+      .order('created_at', { ascending: false });
     if (error) setMessage(`Error loading beats: ${error.message}`);
     else setBeatFiles(data);
   };
@@ -147,15 +150,13 @@ export default function AdminPage() {
   };
 
   const handleAddBeat = async () => {
+    // 1) Basic validation
     if (!audioFile || !coverFile || !newForm.name || !user?.id) {
       return setMessage('Please fill all fields and upload audio & cover.');
     }
 
-    // Upload audio
-    const audioPath = `${Date.now()}-${audioFile.name.replace(
-      /[^a-z0-9.\-_]/gi,
-      '_'
-    )}`;
+    // 2) Upload audio to Supabase Storage
+    const audioPath = `${Date.now()}-${audioFile.name.replace(/[^a-z0-9.\-_]/gi, '_')}`;
     const { error: audioErr } = await supabase.storage
       .from('audio')
       .upload(audioPath, audioFile, {
@@ -167,11 +168,8 @@ export default function AdminPage() {
       return setMessage('❌ Audio upload failed');
     }
 
-    // Upload cover
-    const coverPath = `${Date.now()}-${coverFile.name.replace(
-      /[^a-z0-9.\-_]/gi,
-      '_'
-    )}`;
+    // 3) Upload cover image
+    const coverPath = `${Date.now()}-${coverFile.name.replace(/[^a-z0-9.\-_]/gi, '_')}`;
     const { error: coverErr } = await supabase.storage
       .from('covers')
       .upload(coverPath, coverFile, {
@@ -183,34 +181,41 @@ export default function AdminPage() {
       return setMessage('❌ Cover upload failed');
     }
 
-    // Get public URLs
-    const {
-      data: { publicUrl: audiourl },
-      error: auUrlErr,
-    } = supabase.storage.from('audio').getPublicUrl(audioPath);
-    const {
-      data: { publicUrl: cover },
-      error: cvUrlErr,
-    } = supabase.storage.from('covers').getPublicUrl(coverPath);
-
+    // 4) Get public URLs for both
+    const { data: { publicUrl: audiourl }, error: auUrlErr } =
+      supabase.storage.from('audio').getPublicUrl(audioPath);
+    const { data: { publicUrl: cover }, error: cvUrlErr } =
+      supabase.storage.from('covers').getPublicUrl(coverPath);
     if (auUrlErr || cvUrlErr) {
       console.error('Public URL errors:', auUrlErr, cvUrlErr);
       return setMessage('❌ Failed to get public URLs');
     }
 
-    // Insert new beat with wav & stems fields
-    const { error } = await supabase.from('BeatFiles').insert([
-      {
-        ...newForm,
-        audiourl,
-        cover,
-        user_id: user.id,
-      },
-    ]);
+    // 5) Build your 4-license array
+    const licenses = [
+      { name: 'Basic',     price: 29.99,  file_path: audiourl },
+      { name: 'Standard',  price: 49.99,  file_path: audiourl },
+      { name: 'Premium',   price: 79.99,  file_path: audiourl },
+      { name: 'Exclusive', price: 199.99, file_path: audiourl },
+    ];
 
-    if (error) setMessage(`Insert error: ${error.message}`);
-    else {
-      setMessage('✅ Beat added');
+    // 6) Insert the new BeatFiles row with the `licenses` JSONB column
+    const { error } = await supabase
+      .from('BeatFiles')
+      .insert([{
+        ...newForm,      // name, artist, genre, mood, key, bpm, wav, stems
+        audiourl,        // from step 4
+        cover,           // from step 4
+        user_id: user.id,
+        licenses,        // ← your new JSONB column
+      }]);
+
+    if (error) {
+      console.error('Insert error:', error);
+      setMessage(`Insert error: ${error.message}`);
+    } else {
+      setMessage('✅ Beat added with 4 licenses');
+      // reset form state
       setNewForm({
         name: '',
         artist: '',
@@ -228,90 +233,53 @@ export default function AdminPage() {
   };
 
   if (!user) return <p>Loading...</p>;
-  if (accessDenied)
+  if (accessDenied) {
     return (
       <p className="text-center mt-20 text-xl">
         🚫 Access Denied
       </p>
     );
+  }
 
   return (
     <Layout>
       <div className="max-w-7xl mx-auto mt-10 p-6 bg-white rounded shadow">
         <h1 className="text-2xl font-bold mb-4">Manage BeatFiles</h1>
-        {message && (
-          <p className="mb-4 text-blue-600 text-sm">{message}</p>
-        )}
+        {message && <p className="mb-4 text-blue-600 text-sm">{message}</p>}
 
         <table className="w-full text-sm border-collapse">
           <thead>
             <tr className="bg-gray-100">
               {[
-                'Name',
-                'Artist',
-                'Genre',
-                'Mood',
-                'Key',
-                'BPM',
-                'WAV',
-                'Stems',
-                'Cover',
-                'Audio',
-                'Actions',
+                'Name', 'Artist', 'Genre', 'Mood', 'Key', 'BPM',
+                'WAV', 'Stems', 'Cover', 'Audio', 'Actions',
               ].map((h) => (
-                <th key={h} className="p-2 border">
-                  {h}
-                </th>
+                <th key={h} className="p-2 border">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {/* New Beat Row */}
             <tr className="bg-green-50">
-              {[
-                'name',
-                'artist',
-                'genre',
-                'mood',
-                'key',
-                'bpm',
-                'wav',
-                'stems',
-              ].map((field) => (
+              {['name','artist','genre','mood','key','bpm','wav','stems'].map((field) => (
                 <td key={field} className="p-2 border">
                   <input
                     type="text"
-                    placeholder={`Enter ${field} URL`}
+                    placeholder={`Enter ${field}`}
                     value={newForm[field]}
-                    onChange={(e) =>
-                      setNewForm({
-                        ...newForm,
-                        [field]: e.target.value,
-                      })
-                    }
+                    onChange={(e) => setNewForm({ ...newForm, [field]: e.target.value })}
                     className="w-full border px-1 py-1"
                   />
                 </td>
               ))}
               <td className="p-2 border">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => setCoverFile(e.target.files[0])}
-                />
+                <input type="file" accept="image/*" onChange={(e) => setCoverFile(e.target.files[0])} />
               </td>
               <td className="p-2 border">
-                <input
-                  type="file"
-                  accept="audio/*"
-                  onChange={(e) => setAudioFile(e.target.files[0])}
-                />
+                <input type="file" accept="audio/*" onChange={(e) => setAudioFile(e.target.files[0])} />
               </td>
               <td className="p-2 border">
-                <button
-                  onClick={handleAddBeat}
-                  className="bg-green-600 text-white px-2 py-1 rounded"
-                >
+                <button onClick={handleAddBeat} className="bg-green-600 text-white px-2 py-1 rounded">
                   Add
                 </button>
               </td>
@@ -323,67 +291,29 @@ export default function AdminPage() {
                 {editingId === beat.id ? (
                   <>
                     {/* Editing Mode */}
-                    {[
-                      'name',
-                      'artist',
-                      'genre',
-                      'mood',
-                      'key',
-                      'bpm',
-                      'wav',
-                      'stems',
-                    ].map((field) => (
+                    {['name','artist','genre','mood','key','bpm','wav','stems'].map((field) => (
                       <td key={field} className="p-2 border">
                         <input
                           type="text"
                           value={editForm[field] || ''}
-                          onChange={(e) =>
-                            handleEditChange(field, e.target.value)
-                          }
+                          onChange={(e) => handleEditChange(field, e.target.value)}
                           className="w-full border px-1 py-1"
                         />
                       </td>
                     ))}
-
                     <td className="p-2 border">
-                      <img
-                        src={editForm.cover}
-                        alt="cover"
-                        className="w-12 h-12 mb-2"
-                      />
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) =>
-                          handleReplaceFile(e.target.files[0], 'cover')
-                        }
-                      />
+                      <img src={editForm.cover} alt="cover" className="w-12 h-12 mb-2" />
+                      <input type="file" accept="image/*" onChange={(e) => handleReplaceFile(e.target.files[0], 'cover')} />
                     </td>
                     <td className="p-2 border">
-                      <audio
-                        controls
-                        src={editForm.audiourl}
-                        className="w-32 mb-2"
-                      />
-                      <input
-                        type="file"
-                        accept="audio/*"
-                        onChange={(e) =>
-                          handleReplaceFile(e.target.files[0], 'audio')
-                        }
-                      />
+                      <audio controls src={editForm.audiourl} className="w-32 mb-2" />
+                      <input type="file" accept="audio/*" onChange={(e) => handleReplaceFile(e.target.files[0], 'audio')} />
                     </td>
                     <td className="p-2 border">
-                      <button
-                        onClick={handleSaveEdit}
-                        className="bg-blue-500 text-white px-2 py-1 mr-2 rounded"
-                      >
+                      <button onClick={handleSaveEdit} className="bg-blue-500 text-white px-2 py-1 mr-2 rounded">
                         Save
                       </button>
-                      <button
-                        onClick={() => setEditingId(null)}
-                        className="text-gray-500 underline"
-                      >
+                      <button onClick={() => setEditingId(null)} className="text-gray-500 underline">
                         Cancel
                       </button>
                     </td>
@@ -397,51 +327,23 @@ export default function AdminPage() {
                     <td className="p-2 border">{beat.mood}</td>
                     <td className="p-2 border">{beat.key}</td>
                     <td className="p-2 border">{beat.bpm}</td>
-
                     <td className="p-2 border">
-                      {beat.wav ? (
-                        <a href={beat.wav} target="_blank" rel="noreferrer">
-                          WAV
-                        </a>
-                      ) : (
-                        '—'
-                      )}
+                      {beat.wav ? <a href={beat.wav} target="_blank" rel="noreferrer">WAV</a> : '—'}
                     </td>
                     <td className="p-2 border">
-                      {beat.stems ? (
-                        <a
-                          href={beat.stems}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Stems
-                        </a>
-                      ) : (
-                        '—'
-                      )}
+                      {beat.stems ? <a href={beat.stems} target="_blank" rel="noreferrer">Stems</a> : '—'}
                     </td>
-
                     <td className="p-2 border">
-                      <img
-                        src={beat.cover}
-                        alt="cover"
-                        className="w-12 h-12"
-                      />
+                      <img src={beat.cover} alt="cover" className="w-12 h-12" />
                     </td>
                     <td className="p-2 border">
                       <audio controls src={beat.audiourl} className="w-32" />
                     </td>
                     <td className="p-2 border">
-                      <button
-                        onClick={() => handleEdit(beat)}
-                        className="text-blue-500 underline mr-3"
-                      >
+                      <button onClick={() => handleEdit(beat)} className="text-blue-500 underline mr-3">
                         Edit
                       </button>
-                      <button
-                        onClick={() => handleDelete(beat.id)}
-                        className="text-red-500 underline"
-                      >
+                      <button onClick={() => handleDelete(beat.id)} className="text-red-500 underline">
                         Delete
                       </button>
                     </td>

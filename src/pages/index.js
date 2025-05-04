@@ -67,10 +67,10 @@ export default function Home() {
               Tracks
             </Link>
             <Link 
-              href="/about"
+              href="/contact"
               className="w-16 h-8 flex items-center justify-center bg-white text-black rounded-full text-xs font-semibold hover:bg-gray-200 hover:scale-105 transform transition"
             >
-              About
+              Contact
             </Link>
           </div>
 

@@ -5,53 +5,43 @@ const CartContext = createContext();
 export const CartProvider = ({ children }) => {
   const [cart, setCart] = useState([]);
 
-  // ✅ Load cart from localStorage on mount
   useEffect(() => {
-    const storedCart = localStorage.getItem('antonboss-cart');
-    if (storedCart) {
+    const stored = localStorage.getItem('antonboss-cart');
+    if (stored) {
       try {
-        setCart(JSON.parse(storedCart));
-      } catch (error) {
-        console.error('❌ Failed to parse cart from localStorage:', error);
+        setCart(JSON.parse(stored));
+      } catch {
+        console.error('❌ Failed to parse cart');
       }
     }
   }, []);
 
-  // ✅ Save cart to localStorage on changes
   useEffect(() => {
     localStorage.setItem('antonboss-cart', JSON.stringify(cart));
   }, [cart]);
 
   const addToCart = (newItem) => {
-    setCart((prevCart) => {
-      const exists = prevCart.some(
-        (item) => item.id === newItem.id
-      );
-  
+    setCart((prev) => {
+      // dedupe purely on item.id = `${beatId}-${licenseName}`
+      const exists = prev.some(item => item.id === newItem.id);
       if (exists) {
-        console.warn('⚠️ Item already in cart:', newItem.id);
-        return prevCart; // Don't add duplicate
+        console.warn(`⚠️ Already in cart: ${newItem.id}`);
+        return prev;
       }
-  
-      return [...prevCart, newItem];
+      return [...prev, newItem];
     });
   };
 
-  const removeFromCart = (id) => {
-    setCart((prevCart) => prevCart.filter((item) => item.id !== id));
-  };
+  const removeFromCart = (id) =>
+    setCart((prev) => prev.filter((item) => item.id !== id));
 
   const clearCart = () => {
     setCart([]);
-    localStorage.removeItem('antonboss-cart'); // Optional: clear local copy
+    localStorage.removeItem('antonboss-cart');
   };
 
-  const getTotal = () => {
-    return cart.reduce((total, item) => {
-      const price = typeof item.price === 'number' ? item.price : 0;
-      return total + price;
-    }, 0);
-  };
+  const getTotal = () =>
+    cart.reduce((sum, item) => sum + Number(item.price || 0), 0);
 
   return (
     <CartContext.Provider

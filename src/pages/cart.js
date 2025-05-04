@@ -5,8 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 import { PayPalButtons } from '@paypal/react-paypal-js';
 
 import { useCart } from '../context/CartContext';
-import Navbar from '../components/Navbar';
-import Footer from '../components/Footer';
+import Layout from '../components/Layout';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -48,42 +47,27 @@ export default function CartPage() {
   const storePurchase = async (paypalDetails) => {
     if (!user || cart.length === 0) return;
 
-    // 1) fetch the full beat files for every item in the cart
-    const beatIds = cart.map((item) => item.id);
-    const { data: selectedBeats, error: fetchError } = await supabase
-      .from('BeatFiles')
-      .select('id, name, licenseType, audioUrl, wav, stems')
-      .in('id', beatIds);
+    const beatsPayload = cart.map((item) => ({
+      id:       item.id,
+      name:     item.name,
+      license:  item.licenseType,
+      audioUrl: item.audioUrl,
+      wav:      item.wav || null,
+      stems:    item.stems || null,
+      cover:    item.cover,
+      price:    item.price,
+    }));
 
-    if (fetchError) {
-      console.error('❌ Failed to fetch BeatFiles:', fetchError.message);
-      return;
-    }
-
-    // 2) build the JSON payload, merging in price & cover from cart
-    const beatsPayload = selectedBeats.map((b) => {
-      const cartItem = cart.find((c) => c.id === b.id) || {};
-      return {
-        id: b.id,
-        name: b.name,
-        license: b.licenseType || 'Default License',
-        audioUrl: b.audioUrl,
-        wav: b.wav,
-        stems: b.stems,
-        cover: cartItem.cover,
-        price: cartItem.price ?? cartItem.defaultPrice ?? 0,
-      };
-    });
-
-    // 3) insert the purchase row with the enriched JSON
-    const { error: insertError } = await supabase.from('purchases').insert({
-      user_id: user.id,
-      email: user.email,
-      beats: beatsPayload,
-      total: getTotal(),
-      paypal_transaction_id: paypalDetails.id,
-      created_at: new Date().toISOString(),
-    });
+    const { error: insertError } = await supabase
+      .from('purchases')
+      .insert([{
+        user_id:               user.id,
+        email:                 user.email,
+        beats:                 beatsPayload,
+        total:                 getTotal(),
+        paypal_transaction_id: paypalDetails.id,
+        created_at:            new Date().toISOString(),
+      }]);
 
     if (insertError) {
       console.error('❌ Failed to store purchase in Supabase:', insertError.message);
@@ -93,9 +77,7 @@ export default function CartPage() {
   if (loading) return null;
 
   return (
-    <>
-      <Navbar />
-
+    <Layout>
       <div className="p-6 bg-gray-20 text-black min-h-screen">
         <h1 className="text-3xl mb-6 font-bold">Your Cart</h1>
 
@@ -169,16 +151,11 @@ export default function CartPage() {
                   }
                   onApprove={async (data, actions) => {
                     const details = await actions.order.capture();
-                    console.log('✅ Payment successful!', details);
-
                     await storePurchase(details);
+
                     clearCart();
                     setPurchaseComplete(true);
                     setShowConfirmation(true);
-                  }}
-                  onError={(err) => {
-                    console.error('❌ PayPal error:', err);
-                    alert('Payment failed. Try again.');
                   }}
                 />
               </div>
@@ -186,8 +163,6 @@ export default function CartPage() {
           </>
         )}
       </div>
-
-      <Footer />
 
       {/* Confirmation Modal */}
       {showConfirmation && (
@@ -227,6 +202,6 @@ export default function CartPage() {
           </button>
         </div>
       )}
-    </>
+    </Layout>
   );
 }

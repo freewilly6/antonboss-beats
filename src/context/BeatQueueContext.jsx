@@ -1,3 +1,4 @@
+// BeatQueueContext.jsx
 import { createContext, useContext, useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
@@ -14,8 +15,8 @@ export function BeatQueueProvider({ children }) {
   useEffect(() => {
     const fetchBeats = async () => {
       const { data, error } = await supabase
-        .from('BeatFiles') // your table name
-        .select('*')
+        .from('BeatFiles')
+        .select('id,name,artist,audiourl,cover,genre,key,bpm,licenses') // ← here
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -23,17 +24,17 @@ export function BeatQueueProvider({ children }) {
         return;
       }
 
-      // Optional: filter for valid audioUrl
-      const validBeats = (data || []).filter((beat) => beat.audiourl || beat.audioUrl);
+      const validBeats = (data || []).filter((beat) => beat.audiourl);
 
-      // Normalize data
       const normalizedBeats = validBeats.map((beat) => ({
         ...beat,
-        name: beat.name || beat.title || 'Untitled',
-        audioUrl: beat.audiourl || beat.audioUrl,
-        cover: beat.cover || '/images/beats/default-cover.png',
-        artist: beat.artist || 'Anton Boss',
-        genre: beat.genre || 'Unknown',
+        name:       beat.name || 'Untitled',
+        audioUrl:   beat.audiourl,
+        cover:      beat.cover || '/images/beats/default-cover.png',
+        artist:     beat.artist || 'Anton Boss',
+        genre:      beat.genre || 'Unknown',
+        // licenses is already an array of {name,price,file_path}
+        licenses:   beat.licenses || [],
       }));
 
       setQueue(normalizedBeats);

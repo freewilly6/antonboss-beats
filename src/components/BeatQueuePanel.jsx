@@ -1,8 +1,31 @@
 import { useLicenseModal } from '@/context/LicenseModalContext';
+import React from 'react';
 
 export default function BeatQueuePanel({ queue, currentIndex, onSelect }) {
   const { openLicenseModal } = useLicenseModal();
   const basePrice = 24.99;
+
+  // 1) Tag each track with its original index so we can call onSelect properly
+  const indexed = React.useMemo(
+    () => queue.map((track, idx) => ({ track, originalIdx: idx })),
+    [queue]
+  );
+
+  // 2) Pull out the “current” item and then re-concatenate
+  const displayList = React.useMemo(() => {
+    if (
+      currentIndex == null ||
+      currentIndex < 0 ||
+      currentIndex >= indexed.length
+    ) {
+      return indexed;
+    }
+    // remove the current item
+    const copy = [...indexed];
+    const [currentItem] = copy.splice(currentIndex, 1);
+    // put it at the front
+    return [currentItem, ...copy];
+  }, [indexed, currentIndex]);
 
   return (
     <div className="bg-gray-800 border-t border-gray-700 px-4 py-2 max-h-[250px] overflow-y-auto text-sm">
@@ -15,8 +38,9 @@ export default function BeatQueuePanel({ queue, currentIndex, onSelect }) {
         <div className="text-right">Price</div>
       </div>
 
-      {/* Beat Queue Items */}
-      {queue.map((track, idx) => {
+      {/* Rotated Queue */}
+      {displayList.map(({ track, originalIdx }, displayIdx) => {
+        const isActive = displayIdx === 0;
         const title = track.name || track.title || 'Untitled';
         const genre = track.genre || 'Unknown';
         const artist = track.artist || '';
@@ -24,18 +48,18 @@ export default function BeatQueuePanel({ queue, currentIndex, onSelect }) {
 
         return (
           <div
-            key={track.id || idx}
-            className={`grid grid-cols-6 items-center py-1.5 px-2 hover:bg-gray-700 transition ${
-              idx === currentIndex ? 'bg-gray-700 font-semibold' : ''
-            }`}
+            key={track.id ?? originalIdx}
+            onClick={() => onSelect(originalIdx)}
+            className={`
+              grid grid-cols-6 items-center py-1.5 px-2 hover:bg-gray-700 transition
+              ${isActive ? 'bg-gray-700 font-semibold' : ''}
+            `}
           >
-            <div onClick={() => onSelect(idx)}>{idx + 1}</div>
+            {/* now #1 will always be the current track */}
+            <div>{displayIdx + 1}</div>
 
             {/* Title + Cover */}
-            <div
-              onClick={() => onSelect(idx)}
-              className="col-span-2 flex items-center gap-2 cursor-pointer"
-            >
+            <div className="col-span-2 flex items-center gap-2 cursor-pointer">
               <img
                 src={cover}
                 alt={title}
@@ -44,13 +68,8 @@ export default function BeatQueuePanel({ queue, currentIndex, onSelect }) {
               <div className="truncate">{title}</div>
             </div>
 
-            <div onClick={() => onSelect(idx)} className="truncate cursor-pointer">
-              {genre}
-            </div>
-
-            <div onClick={() => onSelect(idx)} className="truncate cursor-pointer">
-              {artist}
-            </div>
+            <div className="truncate cursor-pointer">{genre}</div>
+            <div className="truncate cursor-pointer">{artist}</div>
 
             {/* License Button */}
             <div className="text-right">
@@ -60,7 +79,7 @@ export default function BeatQueuePanel({ queue, currentIndex, onSelect }) {
                 </span>
               ) : (
                 <button
-                  onClick={(e) => {
+                  onClick={e => {
                     e.stopPropagation();
                     openLicenseModal(track);
                   }}

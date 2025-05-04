@@ -48,13 +48,14 @@ export default function Navbar() {
       }`}
     >
       <Link href="/">
-        <img src="/images/logo.png" alt="AntonBoss Logo" className="h-12 cursor-pointer" />
+        <img src="/images/logo.png" alt="AntonBoss Logo" className="h-17 cursor-pointer" />
       </Link>
       <div className="flex gap-6 font-medium items-center">
         <Link href="/" className="hover:text-indigo-600 transition">Home</Link>
         <Link href="/beats" className="hover:text-indigo-600 transition">Beats</Link>
         <Link href="/about" className="hover:text-indigo-600 transition">About</Link>
         <Link href="/contact" className="hover:text-indigo-600 transition">Contact</Link>
+        <Link href="/downloads" className="hover:text-indigo-600 transition">Downloads</Link>
         <Link href="/cart" className="hover:text-indigo-600 transition relative">
           Cart
           <span className="ml-1 font-semibold text-pink-600">

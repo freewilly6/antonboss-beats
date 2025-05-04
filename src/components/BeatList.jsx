@@ -90,7 +90,7 @@ export default function BeatList({ beats }) {
               {selectedMood || 'Filter Mood'}
             </Listbox.Button>
             <Listbox.Options className="absolute mt-1 w-40 bg-white border rounded-lg shadow-lg z-10">
-              {['Dark','Chill','Aggressive','Happy'].map(m => (
+              {['Dark','Chill','Aggressive','Euphoric','Dance'].map(m => (
                 <Listbox.Option
                   key={m}
                   value={m}
@@ -116,41 +116,7 @@ export default function BeatList({ beats }) {
           </div>
         </Listbox>
 
-        {/* Key */}
-        <Listbox
-          value={selectedKey}
-          onChange={val => setSelectedKey(prev => (prev === val ? '' : val))}
-        >
-          <div className="relative">
-            <Listbox.Button className={filterBtnBase}>
-              {selectedKey || 'Filter Key'}
-            </Listbox.Button>
-            <Listbox.Options className="absolute mt-1 w-40 bg-white border rounded-lg shadow-lg z-10">
-              {['A Minor','B Minor','C Minor','D Minor','E Minor','F Minor', 'G Minor'].map(k => (
-                <Listbox.Option
-                  key={k}
-                  value={k}
-                  className={({ active }) =>
-                    `flex items-center px-4 py-2 cursor-pointer ${
-                      active ? 'bg-gray-100' : ''
-                    }`
-                  }
-                >
-                  {({ selected }) => (
-                    <>
-                      {selected && (
-                        <CheckIcon className="w-5 h-5 text-pink-500 mr-2" />
-                      )}
-                      <span className={selected ? 'font-semibold' : ''}>
-                        {k}
-                      </span>
-                    </>
-                  )}
-                </Listbox.Option>
-              ))}
-            </Listbox.Options>
-          </div>
-        </Listbox>
+      
 
         {/* Artist */}
         <Listbox
