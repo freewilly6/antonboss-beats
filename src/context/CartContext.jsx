@@ -1,8 +1,11 @@
+// context/CartContext.js
 import { createContext, useContext, useState, useEffect } from 'react';
 
 const CartContext = createContext();
 
 export const CartProvider = ({ children }) => {
+  console.log('✅ CartProvider mounted');
+
   const [cart, setCart] = useState([]);
 
   useEffect(() => {
@@ -22,7 +25,6 @@ export const CartProvider = ({ children }) => {
 
   const addToCart = (newItem) => {
     setCart((prev) => {
-      // dedupe purely on item.id = `${beatId}-${licenseName}`
       const exists = prev.some(item => item.id === newItem.id);
       if (exists) {
         console.warn(`⚠️ Already in cart: ${newItem.id}`);

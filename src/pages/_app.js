@@ -19,7 +19,6 @@ function GlobalBeatPlayer() {
   }, []);
 
   if (!hasMounted || !currentBeat) return null;
-
   return <BeatPlayer />;
 }
 
@@ -39,7 +38,6 @@ export default function App({ Component, pageProps }) {
                 <div className="flex-grow">
                   <Component {...pageProps} />
                 </div>
-                {/* ✅ BeatPlayer rendered only once, conditionally */}
                 <GlobalBeatPlayer />
                 <LicenseModal />
               </div>
