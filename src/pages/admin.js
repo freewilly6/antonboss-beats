@@ -41,32 +41,38 @@ export const getServerSideProps = async ({ req, res }) => {
 };
 
 export default function AdminPage({ user, accessDenied }) {
-  // If they’re not allowed, short-circuit to “Access Denied”
-  if (accessDenied) {
-    return (
-      <Layout>
-        <p className="text-center mt-20 text-xl">🚫 Access Denied</p>
-      </Layout>
-    );
-  }
-
-  // ——— below here, you know they’re authenticated as antonbosspd@gmail.com ———
-
-  const [beatFiles, setBeatFiles]   = useState([]);
-  const [message, setMessage]       = useState('');
-  const [editingId, setEditingId]   = useState(null);
-  const [editForm, setEditForm]     = useState({});
-  const [newForm, setNewForm]       = useState({
+  // ─── Hooks (always in the same order) ─────────────────────────────────────────
+  const [beatFiles, setBeatFiles]     = useState([]);
+  const [message, setMessage]         = useState('');
+  const [editingId, setEditingId]     = useState(null);
+  const [editForm, setEditForm]       = useState({});
+  const [newForm, setNewForm]         = useState({
     name: '', artist: '', genre: '', mood: '',
     key: '', bpm: '', wav: '', stems: '',
   });
-  const [coverFile, setCoverFile]   = useState(null);
-  const [audioFile, setAudioFile]   = useState(null);
+  const [coverFile, setCoverFile]     = useState(null);
+  const [audioFile, setAudioFile]     = useState(null);
 
-  // load beats on mount
+  // ─── Data-fetch helper ───────────────────────────────────────────────────────
+  const fetchBeatFiles = async () => {
+    const { data, error } = await supabase
+      .from('BeatFiles')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) {
+      setMessage(`Error loading beats: ${error.message}`);
+    } else {
+      setBeatFiles(data);
+    }
+  };
+
+  // ─── Effects ─────────────────────────────────────────────────────────────────
+  // load beats on mount (only if allowed)
   useEffect(() => {
-    fetchBeatFiles();
-  }, []);
+    if (!accessDenied) {
+      fetchBeatFiles();
+    }
+  }, [accessDenied]);
 
   // clear flash messages after 4s
   useEffect(() => {
@@ -75,19 +81,21 @@ export default function AdminPage({ user, accessDenied }) {
     return () => clearTimeout(t);
   }, [message]);
 
-  const fetchBeatFiles = async () => {
-    const { data, error } = await supabase
-      .from('BeatFiles')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (error) setMessage(`Error loading beats: ${error.message}`);
-    else setBeatFiles(data);
-  };
+  // ─── Access guard (after all hooks) ─────────────────────────────────────────
+  if (accessDenied) {
+    return (
+      <Layout>
+        <p className="text-center mt-20 text-xl">🚫 Access Denied</p>
+      </Layout>
+    );
+  }
 
+  // ─── Handlers ────────────────────────────────────────────────────────────────
   const handleEdit = (beat) => {
     setEditingId(beat.id);
     setEditForm({ ...beat });
   };
+
   const handleEditChange = (field, val) =>
     setEditForm(prev => ({ ...prev, [field]: val }));
 
@@ -98,8 +106,9 @@ export default function AdminPage({ user, accessDenied }) {
       .eq('id', editingId)
       .eq('user_id', user.id);
 
-    if (error) setMessage(`Failed to save: ${error.message}`);
-    else {
+    if (error) {
+      setMessage(`Failed to save: ${error.message}`);
+    } else {
       setMessage('✅ Beat updated');
       setEditingId(null);
       fetchBeatFiles();
@@ -113,8 +122,9 @@ export default function AdminPage({ user, accessDenied }) {
       .eq('id', id)
       .eq('user_id', user.id);
 
-    if (error) setMessage(`Delete failed: ${error.message}`);
-    else {
+    if (error) {
+      setMessage(`Delete failed: ${error.message}`);
+    } else {
       setMessage('🗑️ Beat deleted');
       fetchBeatFiles();
     }
@@ -139,8 +149,10 @@ export default function AdminPage({ user, accessDenied }) {
       return setMessage(`❌ Upload error: ${uploadError.message}`);
     }
 
-    const { data: { publicUrl }, error: publicError } =
-      supabase.storage.from(bucket).getPublicUrl(filePath);
+    const {
+      data: { publicUrl },
+      error: publicError,
+    } = supabase.storage.from(bucket).getPublicUrl(filePath);
     if (publicError) {
       console.error(publicError);
       return setMessage('❌ Couldn’t get public URL');
@@ -166,6 +178,8 @@ export default function AdminPage({ user, accessDenied }) {
     if (!audioFile || !coverFile || !newForm.name) {
       return setMessage('Please fill all fields and upload audio & cover.');
     }
+
+    // Upload audio
     const audioPath = `${Date.now()}-${audioFile.name.replace(/[^a-z0-9.\-_]/gi, '_')}`;
     const { error: audioErr } = await supabase.storage
       .from('audio')
@@ -178,6 +192,7 @@ export default function AdminPage({ user, accessDenied }) {
       return setMessage('❌ Audio upload failed');
     }
 
+    // Upload cover
     const coverPath = `${Date.now()}-${coverFile.name.replace(/[^a-z0-9.\-_]/gi, '_')}`;
     const { error: coverErr } = await supabase.storage
       .from('covers')
@@ -190,6 +205,7 @@ export default function AdminPage({ user, accessDenied }) {
       return setMessage('❌ Cover upload failed');
     }
 
+    // Get URLs
     const { data: { publicUrl: audiourl }, error: auUrlErr } =
       supabase.storage.from('audio').getPublicUrl(audioPath);
     const { data: { publicUrl: cover }, error: cvUrlErr } =
