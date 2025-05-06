@@ -188,7 +188,10 @@ export default function BeatPlayer() {
       <div className="px-3 py-1">
         <div className="relative w-full h-1 bg-gray-800 rounded">
           <input
-            type="range" min={0} max={100} value={progress}
+            type="range"
+            min={0}
+            max={100}
+            value={progress}
             onChange={handleSeek}
             className="absolute inset-0 w-full h-full appearance-none cursor-pointer"
             style={{
@@ -199,42 +202,48 @@ export default function BeatPlayer() {
       </div>
 
       {/* Main row: stacks on xs, rows on sm+ */}
-      <div className="relative flex flex-col sm:flex-row items-center sm:justify-between px-3 py-2 space-y-2 sm:space-y-0">
+      <div className="relative flex flex-col sm:flex-row items-center sm:justify-between px-4 sm:px-6 py-2 space-y-2 sm:space-y-0">
 
-        {/* LEFT: cover, title, artist, price & small-screen queue toggle */}
-        <div className="flex items-center gap-2 min-w-0">
-          <img
-            src={coverImage}
-            alt=""
-            className="w-8 h-8 sm:w-10 sm:h-10 rounded flex-shrink-0"
-          />
-          <div className="min-w-0">
-            <h4 className="font-semibold truncate text-sm sm:text-base">{title}</h4>
-            <p className="text-[10px] sm:text-xs text-gray-400 truncate">{artist}</p>
+        {/* LEFT (mobile): cover+text left, price+toggle right */}
+        <div className="flex items-center w-full justify-between gap-2 sm:w-auto sm:justify-start">
+          {/* cover + title/artist */}
+          <div className="flex items-center gap-2 min-w-0">
+            <img
+              src={coverImage}
+              alt=""
+              className="w-8 h-8 sm:w-10 sm:h-10 rounded flex-shrink-0"
+            />
+            <div className="min-w-0">
+              <h4 className="font-semibold truncate text-sm sm:text-base">{title}</h4>
+              <p className="text-[10px] sm:text-xs text-gray-400 truncate">{artist}</p>
+            </div>
           </div>
-          <button
-            onClick={() => openLicenseModal(activeBeat)}
-            className="bg-pink-500 hover:bg-pink-600 text-white text-xs font-semibold py-1 px-2 rounded whitespace-nowrap"
-            aria-label="Choose license"
-          >
-            From ${basePrice}
-          </button>
-          {/* show on xs only */}
-          <button
-            onClick={() => setIsExpanded(e => !e)}
-            aria-label={isExpanded ? 'Close queue' : 'Open queue'}
-            className="sm:hidden ml-1 text-lg hover:text-pink-400"
-          >
-            {isExpanded ? '×' : '☰'}
-          </button>
+
+          {/* price & mobile queue toggle */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => openLicenseModal(activeBeat)}
+              className="bg-pink-500 hover:bg-pink-600 text-white text-xs font-semibold py-1 px-2 rounded whitespace-nowrap"
+              aria-label="Choose license"
+            >
+              From ${basePrice}
+            </button>
+            {/* mobile only */}
+            <button
+              onClick={() => setIsExpanded(e => !e)}
+              aria-label={isExpanded ? 'Close queue' : 'Open queue'}
+              className="sm:hidden ml-1 text-lg hover:text-pink-400"
+            >
+              {isExpanded ? '×' : '☰'}
+            </button>
+          </div>
         </div>
 
-        {/* CENTER: controls & time  
-            – static in flow on xs, absolute‐centered at sm+ */}
+        {/* CENTER: controls & time */}
         <div className="flex flex-col items-center
                         sm:absolute sm:left-1/2 sm:top-1/2
                         sm:transform sm:-translate-x-1/2 sm:-translate-y-1/2">
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center gap-4 sm:gap-5">
             <button onClick={toggleShuffle} aria-label="Shuffle">
               <ArrowsRightLeftIcon className="h-4 w-4 sm:h-5 sm:w-5 hover:text-pink-400" />
             </button>
@@ -269,11 +278,14 @@ export default function BeatPlayer() {
         <div className="hidden sm:flex items-center gap-2">
           <span role="img" aria-label="Volume">🔊</span>
           <input
-            type="range" min={0} max={1} step={0.01}
-            value={volume} onChange={handleVolume}
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={volume}
+            onChange={handleVolume}
             className="w-16 accent-purple-500"
           />
-          {/* show on sm+ only */}
           <button
             onClick={() => setIsExpanded(e => !e)}
             aria-label={isExpanded ? 'Close queue' : 'Open queue'}
@@ -284,6 +296,7 @@ export default function BeatPlayer() {
         </div>
       </div>
 
+      {/* Queue panel */}
       {isExpanded && (
         <BeatQueuePanel
           queue={isShuffled ? shuffledQueue : queue}

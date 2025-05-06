@@ -28,9 +28,8 @@ export default function Footer() {
   return (
     <>
       <footer className="bg-gray-900 text-gray-400 mt-16 pb-32">
-        <div className="mx-auto max-w-7xl px-4 py-10
-                        grid grid-cols-2 sm:grid-cols-3 gap-6
-                        text-center sm:text-left">
+      <div className="mx-auto max-w-7xl px-4 py-10 grid grid-cols-2 sm:grid-cols-3 gap-6 items-start text-center sm:text-left">
+
           {/* Brand spans both cols on mobile, one col on desktop */}
           <div className="col-span-2 sm:col-span-1">
             <h3 className="text-2xl font-bold text-indigo-300">ANTONBOSS</h3>
@@ -38,7 +37,8 @@ export default function Footer() {
           </div>
 
           {/* Primary links */}
-          <nav className="flex flex-col space-y-2">
+          <nav className="flex flex-col space-y-2 self-start">
+
             <Link href="/" className="hover:text-white">Home</Link>
             <Link href="/beats" className="hover:text-white">Beats</Link>
             <Link href="/contact" className="hover:text-white">Contact</Link>
@@ -53,7 +53,8 @@ export default function Footer() {
           </nav>
 
           {/* Legal links */}
-          <nav className="flex flex-col space-y-2">
+          <nav className="flex flex-col space-y-2 self-start">
+
             <button
               onClick={() => setShowTerms(true)}
               className="hover:text-white text-left"
@@ -66,7 +67,7 @@ export default function Footer() {
             >
               Privacy Policy
             </button>
-            <Link href="/license" className="hover:text-white">Licensing Info</Link>
+            <Link href="/license" className="hover:text-white text-left">Licensing Info</Link>
           </nav>
         </div>
       </footer>

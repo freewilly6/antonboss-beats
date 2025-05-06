@@ -185,15 +185,15 @@ export default function BeatList({ beats }) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {filteredBeats.map(beat => (
                 <div
-                  key={beat.id}
-                  className="p-4 rounded-lg border hover:shadow-md transition flex items-center gap-4"
-                >
-                  <img
-                    src={beat.cover || '/images/beats/default-cover.png'}
-                    alt={beat.name}
-                    className="w-16 h-16 rounded object-cover cursor-pointer"
-                    onClick={() => playBeat(beat)}
-                  />
+                key={beat.id}
+                className="p-4 rounded-lg border hover:shadow-md transition flex items-center gap-4 cursor-pointer"
+                onClick={() => playBeat(beat)}
+              >
+                <img
+                  src={beat.cover || '/images/beats/default-cover.png'}
+                  alt={beat.name}
+                  className="w-16 h-16 rounded object-cover"
+                />
                   <div className="flex flex-col flex-grow">
                     <h3 className="text-lg font-bold">{beat.name}</h3>
                     <p className="text-gray-500 text-sm">

@@ -10,9 +10,9 @@ const supabase = createClient(
 );
 
 export default function Navbar() {
-  const [scrolled, setScrolled]     = useState(false);
-  const [user, setUser]             = useState(null);
-  const { getTotal }                = useCart();
+  const [scrolled, setScrolled] = useState(false);
+  const [user, setUser] = useState(null);
+  const { getTotal } = useCart();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
@@ -57,7 +57,7 @@ export default function Navbar() {
           <img
             src="/images/logo.png"
             alt="AntonBoss Logo"
-            className="h-10 sm:h-16 cursor-pointer"
+            className="h-14 sm:h-20 cursor-pointer"
           />
         </Link>
 
@@ -97,14 +97,60 @@ export default function Navbar() {
         {/* Mobile toggle (still flush right on xs) */}
         <button
           className="sm:hidden text-2xl p-2"
-          onClick={() => setMobileOpen(o => !o)}
+          onClick={() => setMobileOpen((o) => !o)}
           aria-label="Toggle menu"
         >
           {mobileOpen ? '×' : '☰'}
         </button>
       </div>
 
-      {/* …mobile menu unchanged… */}
+      {/* Mobile Menu */}
+      {mobileOpen && (
+        <div className="sm:hidden flex flex-col bg-white px-6 py-4 shadow-md">
+          {links.map(([href, label]) => (
+            <Link
+              key={href}
+              href={href}
+              className="py-2 border-b border-gray-200 hover:text-indigo-600"
+              onClick={() => setMobileOpen(false)}
+            >
+              {label}
+            </Link>
+          ))}
+
+          <Link
+            href="/cart"
+            className="py-2 border-b border-gray-200 hover:text-indigo-600"
+            onClick={() => setMobileOpen(false)}
+          >
+            Cart <span className="ml-1 font-semibold text-pink-600">${getTotal().toFixed(2)}</span>
+          </Link>
+
+          {!user ? (
+            <Link
+              href="/signin"
+              className="py-2 border-b border-gray-200 hover:text-indigo-600"
+              onClick={() => setMobileOpen(false)}
+            >
+              Sign In
+            </Link>
+          ) : (
+            <div className="py-2 flex items-center gap-3">
+              <img
+                src={user.user_metadata?.avatar_url || '/images/user-default.png'}
+                alt="User Avatar"
+                className="w-8 h-8 rounded-full object-cover"
+              />
+              <button
+                onClick={handleSignOut}
+                className="text-sm bg-gray-200 hover:bg-gray-300 rounded px-3 py-1"
+              >
+                Sign Out
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </nav>
   );
 }
