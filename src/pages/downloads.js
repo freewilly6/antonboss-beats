@@ -1,9 +1,9 @@
 // src/pages/downloads.js
+
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { createClient } from '@supabase/supabase-js';
 import Navbar from '../components/Navbar';
-
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -11,6 +11,55 @@ const supabase = createClient(
 );
 
 const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+
+// Extracts the object key from a full R2 URL
+const keyFromUrl = (url) => {
+  try {
+    return new URL(url).pathname.slice(1);
+  } catch {
+    return '';
+  }
+};
+
+// A link component that fetches a presigned URL, handles non-JSON errors,
+// then redirects the browser to that URL to trigger the download.
+function DownloadLink({ objectKey, label }) {
+  const handleClick = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await fetch(
+        `/api/get-download-url?key=${encodeURIComponent(objectKey)}`, 
+        { headers: { Accept: 'application/json' } }
+      );
+
+      // If the response isn't JSON, read it as text (likely an HTML error page)
+      const contentType = res.headers.get('content-type') || '';
+      let body;
+      if (contentType.includes('application/json')) {
+        body = await res.json();
+      } else {
+        const text = await res.text();
+        throw new Error(text || `Unexpected response (${res.status})`);
+      }
+
+      if (!res.ok) {
+        throw new Error(body.error || `Error ${res.status}`);
+      }
+
+      // Redirect the browser to the signed URL
+      window.location.href = body.url;
+    } catch (err) {
+      console.error('Download failed:', err);
+      alert(err.message);
+    }
+  };
+
+  return (
+    <a href="#" onClick={handleClick} className="text-pink-600 underline text-sm">
+      {label}
+    </a>
+  );
+}
 
 export default function DownloadsPage() {
   const [user, setUser] = useState(null);
@@ -22,10 +71,7 @@ export default function DownloadsPage() {
 
   useEffect(() => {
     async function fetchData() {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
+      const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         router.push('/signin?redirectTo=/downloads');
         return;
@@ -37,28 +83,19 @@ export default function DownloadsPage() {
       setIsAdmin(adminFlag);
 
       if (adminFlag) {
-        // ADMIN: fetch every beat with full file links
         const { data: beats, error } = await supabase
           .from('BeatFiles')
           .select('id, name, audiourl, wav, stems');
-        if (error) {
-          console.error('❌ Failed to load BeatFiles:', error.message);
-        } else {
-          setAllBeats(beats || []);
-        }
+        if (error) console.error('❌ Failed to load BeatFiles:', error.message);
+        else setAllBeats(beats || []);
       } else {
-        // REGULAR: fetch only your purchases (beats JSONB contains each item's audioUrl)
         const { data, error } = await supabase
           .from('purchases')
           .select('id, beats, created_at')
           .eq('user_id', u.id)
           .order('created_at', { ascending: false });
-
-        if (error) {
-          console.error('❌ Failed to load purchases:', error.message);
-        } else {
-          setPurchases(data || []);
-        }
+        if (error) console.error('❌ Failed to load purchases:', error.message);
+        else setPurchases(data || []);
       }
 
       setLoading(false);
@@ -75,44 +112,30 @@ export default function DownloadsPage() {
   }
 
   let content;
-
   if (isAdmin) {
     content = (
       <div className="space-y-4">
-        {allBeats.map((beat) => (
-          <div key={beat.id} className="bg-gray-100 p-4 rounded shadow">
-            <h3 className="font-semibold">{beat.name}</h3>
-            <div className="flex flex-col gap-1 mt-2">
-              {beat.audiourl && (
-                <a
-                  href={beat.audiourl}
-                  download
-                  className="text-pink-600 underline text-sm"
-                >
-                  Download MP3
-                </a>
-              )}
-              {beat.wav && (
-                <a
-                  href={beat.wav}
-                  download
-                  className="text-pink-600 underline text-sm"
-                >
-                  Download WAV
-                </a>
-              )}
-              {beat.stems && (
-                <a
-                  href={beat.stems}
-                  download
-                  className="text-pink-600 underline text-sm"
-                >
-                  Download STEMS
-                </a>
-              )}
+        {allBeats.map((beat) => {
+          const mp3Key = keyFromUrl(beat.audiourl);
+          const wavKey = beat.wav ? keyFromUrl(beat.wav) : null;
+          const stemsKey = beat.stems ? keyFromUrl(beat.stems) : null;
+          return (
+            <div key={beat.id} className="bg-gray-100 p-4 rounded shadow">
+              <h3 className="font-semibold">{beat.name}</h3>
+              <div className="flex flex-col gap-1 mt-2">
+                {beat.audiourl && (
+                  <DownloadLink objectKey={mp3Key} label="Download MP3" />
+                )}
+                {beat.wav && (
+                  <DownloadLink objectKey={wavKey} label="Download WAV" />
+                )}
+                {beat.stems && (
+                  <DownloadLink objectKey={stemsKey} label="Download STEMS" />
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     );
   } else if (purchases.length === 0) {
@@ -125,32 +148,25 @@ export default function DownloadsPage() {
         {purchases.map((purchase) => (
           <div key={purchase.id} className="space-y-4">
             <h2 className="text-xl font-semibold">
-              Purchased on{' '}
-              {new Date(purchase.created_at).toLocaleDateString()}
+              Purchased on {new Date(purchase.created_at).toLocaleDateString()}
             </h2>
             <div className="space-y-4">
-              {(purchase.beats || []).map((item) => (
-                <div
-                  key={item.id}
-                  className="bg-gray-100 p-4 rounded shadow"
-                >
-                  <h3 className="font-semibold">{item.name}</h3>
-                  <p className="text-sm text-gray-500">
-                    License: {item.licenseType}
-                  </p>
-                  <div className="flex flex-col gap-1 mt-2">
-                    {item.audioUrl && (
-                      <a
-                        href={item.audioUrl}
-                        download
-                        className="text-pink-600 underline text-sm"
-                      >
-                        Download MP3
-                      </a>
-                    )}
+              {(purchase.beats || []).map((item) => {
+                const audioKey = keyFromUrl(item.audioUrl);
+                return (
+                  <div key={item.id} className="bg-gray-100 p-4 rounded shadow">
+                    <h3 className="font-semibold">{item.name}</h3>
+                    <p className="text-sm text-gray-500">
+                      License: {item.licenseType}
+                    </p>
+                    <div className="flex flex-col gap-1 mt-2">
+                      {item.audioUrl && (
+                        <DownloadLink objectKey={audioKey} label="Download MP3" />
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         ))}
