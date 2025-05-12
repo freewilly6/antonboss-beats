@@ -43,12 +43,23 @@ export default function AdminPage() {
 
   const onDropWav = useCallback(files => setWavFile(files[0]), []);
   const { getRootProps: getWavRoot, getInputProps: getWavInput } = useDropzone({
-    onDrop: onDropWav, accept: '.wav', multiple: false,
+    onDrop: onDropWav,
+    multiple: false,
+    accept: {
+      'audio/wav':      ['.wav'],
+      'audio/x-wav':    ['.wav'],
+      'audio/wave':     ['.wav'],
+    },
   });
 
   const onDropStems = useCallback(files => setStemsFile(files[0]), []);
   const { getRootProps: getStemsRoot, getInputProps: getStemsInput } = useDropzone({
-    onDrop: onDropStems, accept: '.zip', multiple: false,
+    onDrop: onDropStems,
+    multiple: false,
+    accept: {
+      'application/zip':            ['.zip'],
+      'application/x-zip-compressed':['.zip'],
+    },
   });
 
   const onDropCover = useCallback(files => setCoverFile(files[0]), []);

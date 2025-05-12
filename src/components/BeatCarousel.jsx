@@ -1,4 +1,4 @@
-import { Swiper, SwiperSlide } from 'swiper/react';
+import { Swiper, SwiperSlide } from 'swiper/react'; 
 import { EffectCoverflow, Navigation } from 'swiper/modules';
 import { usePlayer } from '@/context/PlayerContext';
 import Image from 'next/image';
@@ -12,14 +12,14 @@ export default function BeatCarousel({ beats }) {
 
   const handleSelectBeat = (beat) => {
     const currentUrl = currentBeat?.audioUrl || currentBeat?.audiourl;
-    const beatUrl    = beat.audioUrl   || beat.audiourl;
+    const beatUrl    = beat.audioUrl    || beat.audiourl;
     if (currentUrl === beatUrl) return;
 
     playBeat({
-      name:     beat.name || beat.title || 'Untitled',
+      name:     beat.name       || beat.title            || 'Untitled',
       audioUrl: beatUrl,
-      cover:    beat.cover || '/images/beats/default-cover.png',
-      artist:   beat.artistType || beat.artist || 'Anton Boss',
+      cover:    beat.cover      || '/images/beats/default-cover.png',
+      artist:   beat.artistType || beat.artist           || 'Anton Boss',
     });
   };
 
@@ -42,13 +42,13 @@ export default function BeatCarousel({ beats }) {
         className="mySwiper"
       >
         {beats.map((beat) => {
-          const title = beat.name || beat.title || 'Untitled';
-          const cover = beat.cover || '/images/beats/default-cover.png';
+          const title = beat.name       || beat.title            || 'Untitled';
+          const cover = beat.cover      || '/images/beats/default-cover.png';
           const infoParts = [
             beat.genre,
             beat.mood,
             beat.key,
-            beat.bpm ? `${beat.bpm}` : null,
+            beat.bpm,                          // number will be coerced to string
             beat.artistType || beat.artist,
           ].filter(Boolean);
 
@@ -57,11 +57,9 @@ export default function BeatCarousel({ beats }) {
               key={beat.id}
               onClick={() => handleSelectBeat(beat)}
               className="flex-shrink-0 cursor-pointer"
-              style={{ width: 300 /* keep slide width at 300px */ }}
+              style={{ width: 300 }}
             >
-              {/* Center everything vertically in the slide */}
               <div className="flex flex-col items-center">
-                {/* 300×300 cover container */}
                 <div className="relative w-[300px] h-[300px] rounded-xl overflow-hidden">
                   <Image
                     src={cover}
@@ -70,8 +68,6 @@ export default function BeatCarousel({ beats }) {
                     className="object-cover"
                   />
                 </div>
-
-                {/* metadata & title below */}
                 <div className="mt-4 text-center space-y-1">
                   {infoParts.length > 0 && (
                     <p className="text-sm text-gray-500">
