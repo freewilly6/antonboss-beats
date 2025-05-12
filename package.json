@@ -25,6 +25,7 @@
     "nookies": "^2.5.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-dropzone": "^14.3.8",
     "react-icons": "^5.5.0",
     "swiper": "^11.2.6",
     "wavesurfer.js": "^7.9.4"

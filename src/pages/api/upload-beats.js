@@ -17,7 +17,6 @@ const r2 = new S3Client({
   },
 });
 
-// Note: no top-level throw here
 const PUBLIC_R2_URL = process.env.PUBLIC_R2_URL;
 
 function parseForm(req) {
@@ -27,7 +26,7 @@ function parseForm(req) {
     uploadDir,
     keepExtensions: true,
     multiples: false,
-    maxFileSize: 500 * 1024 * 1024, // 500MB
+    maxFileSize: 1024 * 1024 * 1024, // 1 GB
   });
 
   return new Promise((resolve, reject) => {
@@ -39,75 +38,57 @@ function parseForm(req) {
 }
 
 export default async function handler(req, res) {
-  // 1️⃣ ENV-VAR CHECK
   if (!PUBLIC_R2_URL) {
     console.error('❌ PUBLIC_R2_URL not set');
-    return res
-      .status(500)
-      .json({ error: 'Server misconfiguration: PUBLIC_R2_URL missing' });
+    return res.status(500).json({ error: 'Server misconfiguration: PUBLIC_R2_URL missing' });
   }
 
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
-    return res
-      .status(405)
-      .json({ error: 'Method Not Allowed. Use POST.' });
+    return res.status(405).json({ error: 'Method Not Allowed. Use POST.' });
   }
 
   try {
-    // 2️⃣ PARSE MULTIPART
-    const { files } = await parseForm(req);
-    console.log('Parsed files:', files);
+    const { fields, files } = await parseForm(req);
+    console.log('Upload fields:', fields);
+    console.log('Upload files:', files);
 
-    // 3️⃣ LOCATE THE FILE
+    // Pick up the 'folder' from the form
+    const folder = (fields.folder || '').toString().trim();
     const fileField = files.file ?? Object.values(files)[0];
     const fileObj = Array.isArray(fileField) ? fileField[0] : fileField;
-    const tempPath = fileObj?.filepath ?? fileObj?.path;
+    const tempPath = fileObj.filepath || fileObj.path;
     if (!fileObj || !tempPath) {
       console.error('No valid file uploaded:', files);
-      return res
-        .status(400)
-        .json({ error: 'No valid file uploaded' });
+      return res.status(400).json({ error: 'No valid file uploaded' });
     }
 
-    // 4️⃣ UPLOAD TO R2
-    const original =
-      fileObj.originalFilename ||
-      fileObj.filename ||
-      fileObj.newFilename ||
-      fileObj.name ||
-      'upload';
-    const safe = original.replace(/[^a-z0-9.\-_]/gi, '_');
-    const key = `${Date.now()}-${safe}`;
+    // Build a safe, timestamped key, optionally prefixed by folder
+    const originalName = fileObj.originalFilename || fileObj.filename || 'upload';
+    const safeName = originalName.replace(/[^a-z0-9.\-_]/gi, '_');
+    const key = `${folder ? folder + '/' : ''}${Date.now()}-${safeName}`;
 
     await r2.send(
       new PutObjectCommand({
         Bucket: process.env.R2_BUCKET,
         Key: key,
         Body: fs.createReadStream(tempPath),
-        ContentType:
-          fileObj.mimetype || 'application/octet-stream',
+        ContentType: fileObj.mimetype || 'application/octet-stream',
       })
     );
 
-    // 5️⃣ RETURN JSON URL
     const url = `${PUBLIC_R2_URL}/${key}`;
     console.log('✅ Uploaded to R2, URL:', url);
-    return res.status(200).json({ url });
+    res.status(200).json({ url });
   } catch (err) {
     console.error('🔥 upload-beats error:', err);
-    // Formidable sets httpCode on parse errors
     const status = err.httpCode || err.statusCode || 500;
-    return res
-      .status(status)
-      .json({ error: err.message || 'Internal Server Error' });
+    res.status(status).json({ error: err.message || 'Internal Server Error' });
   } finally {
-    // 6️⃣ CLEANUP TMP
+    // cleanup tmp
     try {
       const tmpDir = path.join(process.cwd(), 'tmp');
-      fs.readdirSync(tmpDir).forEach(f =>
-        fs.unlinkSync(path.join(tmpDir, f))
-      );
+      fs.readdirSync(tmpDir).forEach(f => fs.unlinkSync(path.join(tmpDir, f)));
     } catch (cleanupErr) {
       console.warn('Cleanup failed:', cleanupErr);
     }

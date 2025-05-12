@@ -72,10 +72,16 @@ const CoverInfo = React.memo(function CoverInfo({
 
 /** Center controls: shuffle, prev, play/pause, next, repeat */
 const Controls = React.memo(function Controls({
-  isPlaying, onPlayPause,
-  onPrev, onNext, skipCooldown,
-  isShuffled, onShuffle,
-  isRepeat, onRepeat
+  isPlaying,
+  onPlayPause,
+  onPrev,
+  onNext,
+  skipCooldown,
+  isShuffled,
+  onShuffle,
+  shuffleCooldown,
+  isRepeat,
+  onRepeat
 }) {
   return (
     <div className="flex items-center gap-4 sm:gap-5">
@@ -84,6 +90,8 @@ const Controls = React.memo(function Controls({
         onClick={onShuffle}
         aria-label="Shuffle"
         aria-pressed={isShuffled}
+        disabled={shuffleCooldown}
+        className="disabled:opacity-50 disabled:cursor-not-allowed"
       >
         <ArrowsRightLeftIcon
           className={`h-4 w-4 sm:h-5 sm:w-5 transition-colors ${
@@ -162,12 +170,16 @@ export default function BeatPlayer() {
   const [currentTime, setCurrentTime]         = useState(0);
   const [isExpanded,  setIsExpanded]          = useState(false);
   const [isShuffled,  setIsShuffled]          = useState(false);
-  const [isRepeat,    setIsRepeat]            = useState(false);
+  const [isRepeat,    setIsRepeat]            = useState(false);       // ← re-added!
   const [localShuffledQueue, setLocalShuffledQueue] = useState([]);
 
-  // skip-spam throttle
-  const SKIP_COOLDOWN_MS = 500;
-  const [skipCooldown, setSkipCooldown] = useState(false);
+  // skip/spam throttle
+  const SKIP_COOLDOWN_MS    = 500;
+  const [skipCooldown, setSkipCooldown]       = useState(false);
+
+  // shuffle/spam throttle
+  const SHUFFLE_COOLDOWN_MS = 500;
+  const [shuffleCooldown, setShuffleCooldown] = useState(false);
 
   // derive currentQueue & activeBeat
   const currentQueue = useMemo(
@@ -242,26 +254,29 @@ export default function BeatPlayer() {
     playBeat, setPlaybackTime, setShouldAutoPlay
   ]);
 
-  // 🔀 Toggle shuffle
+  // 🔀 Toggle shuffle (synchronously build & re-index)
   const toggleShuffle = useCallback(() => {
-    setIsShuffled(prev => !prev);
-  }, []);
+    if (shuffleCooldown) return;
+    setShuffleCooldown(true);
+    setTimeout(() => setShuffleCooldown(false), SHUFFLE_COOLDOWN_MS);
 
-  // when isShuffled flips, build or clear your shuffled list & reset index
-  useEffect(() => {
-    if (isShuffled) {
-      const shuffled = shuffleArray(queue);
-      setLocalShuffledQueue(shuffled);
-      const idx = shuffled.findIndex(b => b.id === activeBeat.id);
-      setCurrentIndex(idx < 0 ? 0 : idx);
-    } else {
-      setLocalShuffledQueue([]);
-      const idx = queue.findIndex(b => b.id === activeBeat.id);
-      setCurrentIndex(idx < 0 ? 0 : idx);
-    }
-  }, [isShuffled, queue, activeBeat.id]);
+    setIsShuffled(prev => {
+      const next = !prev;
+      if (next) {
+        const shuffled = shuffleArray(queue);
+        setLocalShuffledQueue(shuffled);
+        const idx = shuffled.findIndex(b => b.id === activeBeat.id);
+        setCurrentIndex(idx < 0 ? 0 : idx);
+      } else {
+        setLocalShuffledQueue([]);
+        const idx = queue.findIndex(b => b.id === activeBeat.id);
+        setCurrentIndex(idx < 0 ? 0 : idx);
+      }
+      return next;
+    });
+  }, [queue, activeBeat.id, shuffleCooldown]);
 
-  // 🔁 Toggle repeat (single-track repeat)
+  // 🔁 Toggle repeat
   const toggleRepeat = useCallback(() => {
     setIsRepeat(prev => !prev);
   }, []);
@@ -424,6 +439,7 @@ export default function BeatPlayer() {
             skipCooldown={skipCooldown}
             isShuffled={isShuffled}
             onShuffle={toggleShuffle}
+            shuffleCooldown={shuffleCooldown}
             isRepeat={isRepeat}
             onRepeat={toggleRepeat}
           />
