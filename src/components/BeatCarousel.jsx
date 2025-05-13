@@ -1,11 +1,12 @@
 import { Swiper, SwiperSlide } from 'swiper/react'; 
-import { EffectCoverflow, Navigation } from 'swiper/modules';
+import { EffectCoverflow, Navigation, Keyboard } from 'swiper/modules';
 import { usePlayer } from '@/context/PlayerContext';
 import Image from 'next/image';
 
 import 'swiper/css';
 import 'swiper/css/navigation';
 import 'swiper/css/effect-coverflow';
+import 'swiper/css/keyboard';
 
 export default function BeatCarousel({ beats }) {
   const { playBeat, currentBeat } = usePlayer();
@@ -26,7 +27,7 @@ export default function BeatCarousel({ beats }) {
   return (
     <div className="w-full max-w-5xl mx-auto mt-10">
       <Swiper
-        modules={[EffectCoverflow, Navigation]}
+        modules={[EffectCoverflow, Navigation, Keyboard]}
         effect="coverflow"
         grabCursor
         centeredSlides
@@ -39,6 +40,10 @@ export default function BeatCarousel({ beats }) {
           slideShadows: false,
         }}
         navigation
+        keyboard={{
+          enabled: true,
+          onlyInViewport: true,    // set to false if you want it to work even when swiper isn't fully in view
+        }}
         className="mySwiper"
       >
         {beats.map((beat) => {
@@ -48,7 +53,7 @@ export default function BeatCarousel({ beats }) {
             beat.genre,
             beat.mood,
             beat.key,
-            beat.bpm,                          // number will be coerced to string
+            beat.bpm,                          
             beat.artistType || beat.artist,
           ].filter(Boolean);
 

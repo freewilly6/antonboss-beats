@@ -7,7 +7,7 @@ export default function Layout({ children, showNavbar = true, showFooter = true 
     <div className="min-h-screen flex flex-col bg-white text-black">
       {showNavbar && <Navbar />}
 
-      <main className="container mx-auto px-4 flex-grow pt-20">
+      <main className="container mx-auto px-4 flex-grow pt-22">
         {children}
       </main>
 
