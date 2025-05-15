@@ -10,6 +10,7 @@ export default function BeatList({ beats }) {
   const [selectedMood,   setSelectedMood]   = useState('');
   const [selectedKey,    setSelectedKey]    = useState('');
   const [selectedArtist, setSelectedArtist] = useState('');
+  
 
   const { playBeat } = usePlayer();
   const { openLicenseModal } = useLicenseModal();

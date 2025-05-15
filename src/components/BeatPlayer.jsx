@@ -325,16 +325,28 @@ export default function BeatPlayer() {
   }, []);
 
   // Spacebar → play/pause
-  useEffect(() => {
-    const onKey = e => {
-      if (e.code === 'Space') {
-        e.preventDefault();
-        togglePlay();
-      }
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [togglePlay]);
+  // Spacebar → play/pause, but not when typing in inputs/textareas/etc.
+useEffect(() => {
+  const onKey = e => {
+    if (e.code !== 'Space') return;
+
+    const tgt = e.target;
+    const tag = tgt.tagName;             // e.g. "INPUT", "TEXTAREA", "DIV"
+    const isEditable = tgt.isContentEditable;
+
+    // if focus is in an <input>, <textarea> or any contentEditable, skip toggling
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || isEditable) {
+      return;
+    }
+
+    e.preventDefault();
+    togglePlay();
+  };
+
+  document.addEventListener('keydown', onKey);
+  return () => document.removeEventListener('keydown', onKey);
+}, [togglePlay]);
+
 
   // Load new track + autoplay
   useEffect(() => {

@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useCart } from '../context/CartContext';
 import { createClient } from '@supabase/supabase-js';
+import { UserIcon } from '@heroicons/react/24/outline';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -74,9 +75,9 @@ export default function Navbar() {
           </Link>
 
           {!user ? (
-            <Link href="/signin" className="text-2xl hover:scale-110 transition">
-              🧑‍🦯
-            </Link>
+            <Link href="/signin" className="hover:scale-110 transition">
+          <UserIcon className="h-6 w-6" aria-hidden="true" />
+          </Link>
           ) : (
             <div className="flex items-center gap-3">
               <img

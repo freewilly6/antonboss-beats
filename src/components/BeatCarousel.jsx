@@ -1,4 +1,4 @@
-import { Swiper, SwiperSlide } from 'swiper/react'; 
+import { Swiper, SwiperSlide } from 'swiper/react';
 import { EffectCoverflow, Navigation, Keyboard } from 'swiper/modules';
 import { usePlayer } from '@/context/PlayerContext';
 import Image from 'next/image';
@@ -40,22 +40,19 @@ export default function BeatCarousel({ beats }) {
           slideShadows: false,
         }}
         navigation
-        keyboard={{
-          enabled: true,
-          onlyInViewport: true,    // set to false if you want it to work even when swiper isn't fully in view
-        }}
+        keyboard={{ enabled: true, onlyInViewport: true }}
         className="mySwiper"
       >
         {beats.map((beat) => {
-          const title = beat.name       || beat.title            || 'Untitled';
-          const cover = beat.cover      || '/images/beats/default-cover.png';
+          const title     = beat.name       || beat.title || 'Untitled';
+          const cover     = beat.cover      || '/images/beats/default-cover.png';
           const infoParts = [
-            beat.genre,
-            beat.mood,
-            beat.key,
-            beat.bpm,                          
+            beat.genre, beat.mood, beat.key, beat.bpm,
             beat.artistType || beat.artist,
           ].filter(Boolean);
+
+          const beatUrl = beat.audioUrl || beat.audiourl;
+          const isActive = currentBeat?.audioUrl === beatUrl;
 
           return (
             <SwiperSlide
@@ -64,25 +61,56 @@ export default function BeatCarousel({ beats }) {
               className="flex-shrink-0 cursor-pointer"
               style={{ width: 300 }}
             >
-              <div className="flex flex-col items-center">
-                <div className="relative w-[300px] h-[300px] rounded-xl overflow-hidden">
-                  <Image
-                    src={cover}
-                    alt={title}
-                    fill
-                    className="object-cover"
-                  />
-                </div>
-                <div className="mt-4 text-center space-y-1">
-                  {infoParts.length > 0 && (
-                    <p className="text-sm text-gray-500">
-                      {infoParts.join(' | ')}
-                    </p>
-                  )}
-                  <h2 className="text-black text-2xl font-bold">
-                    {title}
-                  </h2>
-                </div>
+   {/* DISC WRAPPER */}
+<div
+  className="
+    relative w-[280px] h-[280px]
+    rounded-full overflow-hidden
+    ring-4 ring-gray-200 shadow-lg
+    bg-gradient-to-br from-gray-100 via-gray-300 to-gray-100
+  "
+  style={{
+    WebkitMaskImage: 'radial-gradient(circle at center, transparent 8%, black 10%)',
+    maskImage:       'radial-gradient(circle at center, transparent 8%, black 10%)',
+  }}
+>
+  {/* — COVER ART (z-0) — */}
+  <div
+  className={`absolute inset-0 z-0 ${
+    isActive
+      ? 'animate-[spin_4s_linear_infinite]'
+      : ''
+  }`}
+>
+  <Image
+    src={cover}
+    alt={title}
+    fill
+    className="object-cover"
+  />
+</div>
+
+  {/* — CENTER RING OVERLAY (z-30) — */}
+  <div className="absolute inset-0 z-30 pointer-events-none">
+    <Image
+      src="/images/cd-overlay.png"
+      alt="CD Overlay"
+      fill
+      className="object-contain"
+    />
+  </div>
+</div>
+
+              {/* INFO BELOW */}
+              <div className="mt-4 text-center space-y-1">
+                {infoParts.length > 0 && (
+                  <p className="text-sm text-gray-500">
+                    {infoParts.join(' | ')}
+                  </p>
+                )}
+                <h2 className="text-black text-2xl font-bold">
+                  {title}
+                </h2>
               </div>
             </SwiperSlide>
           );

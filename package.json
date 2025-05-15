@@ -14,9 +14,12 @@
     "@headlessui/react": "^2.2.2",
     "@heroicons/react": "^2.2.0",
     "@paypal/react-paypal-js": "^8.8.3",
+    "@react-three/drei": "^10.0.7",
+    "@react-three/fiber": "^9.1.2",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.4",
     "aws-sdk": "^2.1692.0",
+    "classnames": "^2.5.1",
     "cookie": "^1.0.2",
     "formidable": "^3.5.4",
     "js-cookie": "^3.0.5",
@@ -30,6 +33,7 @@
     "react-icons": "^5.5.0",
     "react-parallax-tilt": "^1.7.295",
     "swiper": "^11.2.6",
+    "three": "^0.176.0",
     "wavesurfer.js": "^7.9.4"
   },
   "devDependencies": {

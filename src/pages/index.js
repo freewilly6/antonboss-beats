@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import Layout from '../components/Layout';
 import Link from 'next/link';
 import { supabase } from '../lib/supabaseClient';
+import { UserIcon } from '@heroicons/react/24/outline';
 
 export default function Home() {
   const [user, setUser] = useState(null);
@@ -43,7 +44,7 @@ export default function Home() {
             </div>
 
           {/* Sign In / Sign Out Button */}
-          <div className="absolute top-[18px] right-[233px] z-10">
+             <div className="absolute top-[18px] right-[233px] z-10">
             <button
               onClick={() => {
                 if (user) {
@@ -52,11 +53,13 @@ export default function Home() {
                   window.location.href = '/signin';
                 }
               }}
-              className="bg-white text-black hover:bg-gray-200 hover:scale-105 transform transition text-base p-2 rounded-full mt-4 cursor-pointer"
+              className="bg-white text-black hover:bg-gray-200 hover:scale-105 transform transition p-2 rounded-full mt-4 cursor-pointer"
             >
-              👤
+              {/* 2) Swap out emoji for Heroicon */}
+              <UserIcon className="h-6 w-6" aria-hidden="true" />
             </button>
           </div>
+
 
           {/* Tracks and About Buttons */}
           <div className="absolute top-[110px] right-[20px] flex space-x-2 z-10">
