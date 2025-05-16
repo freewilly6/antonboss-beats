@@ -127,3 +127,15 @@ input[type="range"]::-webkit-slider-thumb {
   box-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
   cursor: pointer;
 }
+.disc-wrapper {
+  position: relative;
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+/* this sits inside the rotating layer and gets scaled up */
+.border-rotator {
+  transform: scale(1.025);
+}
