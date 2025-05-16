@@ -5,6 +5,7 @@ import { usePlayer } from '../context/PlayerContext';
 import BeatCarousel from './BeatCarousel';
 import { useLicenseModal } from '@/context/LicenseModalContext';
 
+
 export default function BeatList({ beats }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMood,   setSelectedMood]   = useState('');
@@ -39,13 +40,15 @@ export default function BeatList({ beats }) {
 
   // final filter logic
   const filteredBeats = beatsWithAudio.filter(beat => {
-    const matchesText =
+     const matchesText =
       searchTerms.length === 0 ||
-      searchTerms.some(term =>
-        beat.name.toLowerCase().includes(term) ||
-        (beat.mood  || '').toLowerCase().includes(term) ||
-        (beat.key   || '').toLowerCase().includes(term) ||
-        (beat.artist|| '').toLowerCase().includes(term)
+      // require that EVERY term match at least one of these fields:
+      searchTerms.every(term =>
+        [beat.name, beat.mood, beat.key, beat.artist, beat.genre]
+          .filter(Boolean)              // drop any undefined
+          .some(field =>
+            field.toLowerCase().includes(term)
+          )
       );
 
     const matchesMood   = !selectedMood   || beat.mood   === selectedMood;

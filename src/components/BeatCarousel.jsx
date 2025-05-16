@@ -61,7 +61,7 @@ export default function BeatCarousel({ beats }) {
               className="flex-shrink-0 cursor-pointer"
               style={{ width: 300 }}
             >
-   {/* DISC WRAPPER */}
+  {/* DISC WRAPPER */}
 <div
   className="
     relative w-[280px] h-[280px]
@@ -76,19 +76,20 @@ export default function BeatCarousel({ beats }) {
 >
   {/* — COVER ART (z-0) — */}
   <div
-  className={`absolute inset-0 z-0 ${
-    isActive
-      ? 'animate-[spin_4s_linear_infinite]'
-      : ''
-  }`}
->
-  <Image
-    src={cover}
-    alt={title}
-    fill
-    className="object-cover"
-  />
-</div>
+    className={`absolute inset-0 z-0 ${
+      isActive
+        ? 'animate-[spin_4s_linear_infinite]'
+        : ''
+    }`}
+  >
+    <Image
+      src={cover}
+      alt={title}
+      fill
+      sizes="280px"
+      className="object-cover"
+    />
+  </div>
 
   {/* — CENTER RING OVERLAY (z-30) — */}
   <div className="absolute inset-0 z-30 pointer-events-none">
@@ -96,6 +97,7 @@ export default function BeatCarousel({ beats }) {
       src="/images/cd-overlay.png"
       alt="CD Overlay"
       fill
+      sizes="280px"
       className="object-contain"
     />
   </div>
