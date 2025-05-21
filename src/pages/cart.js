@@ -1,4 +1,3 @@
-// src/pages/cart.js
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { createClient } from '@supabase/supabase-js';
@@ -17,6 +16,7 @@ const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
 export default function CartPage() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
+  const [accessToken, setAccessToken] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [purchaseComplete, setPurchaseComplete] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
@@ -37,40 +37,50 @@ export default function CartPage() {
         const u = session.user;
         setUser(u);
         setIsAdmin(u.email === ADMIN_EMAIL);
+        setAccessToken(session.access_token);
         setLoading(false);
       }
     };
-
     checkAuth();
   }, [router]);
 
-  const storePurchase = async (paypalDetails) => {
-    if (!user || cart.length === 0) return;
+  const handlePayPalApproval = async (details) => {
+    try {
+      // ── sanity‐check & build payload ───────────────────────────
+      const payloadItems = cart.map(item => {
+        if (typeof item.beatId !== 'number') {
+          console.error('Cart item missing beatId!', item);
+          throw new Error('Cart is in an invalid state: missing beatId');
+        }
+        return {
+          beatId:      item.beatId,
+          licenseName: item.licenseType,
+        };
+      });
 
-    const beatsPayload = cart.map((item) => ({
-      id:       item.id,
-      name:     item.name,
-      license:  item.licenseType,
-      audioUrl: item.audioUrl,
-      wav:      item.wav || null,
-      stems:    item.stems || null,
-      cover:    item.cover,
-      price:    item.price,
-    }));
+      const response = await fetch('/api/complete-purchase', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          orderID: details.id,
+          items:   payloadItems,
+        }),
+      });
 
-    const { error: insertError } = await supabase
-      .from('purchases')
-      .insert([{
-        user_id:               user.id,
-        email:                 user.email,
-        beats:                 beatsPayload,
-        total:                 getTotal(),
-        paypal_transaction_id: paypalDetails.id,
-        created_at:            new Date().toISOString(),
-      }]);
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to finalize purchase');
+      }
 
-    if (insertError) {
-      console.error('❌ Failed to store purchase in Supabase:', insertError.message);
+      clearCart();
+      setPurchaseComplete(true);
+      setShowConfirmation(true);
+    } catch (err) {
+      console.error('❌ Purchase failed:', err);
+      alert('Payment succeeded, but something went wrong on our end. Please contact support.');
     }
   };
 
@@ -151,11 +161,7 @@ export default function CartPage() {
                   }
                   onApprove={async (data, actions) => {
                     const details = await actions.order.capture();
-                    await storePurchase(details);
-
-                    clearCart();
-                    setPurchaseComplete(true);
-                    setShowConfirmation(true);
+                    await handlePayPalApproval(details);
                   }}
                 />
               </div>
@@ -164,7 +170,6 @@ export default function CartPage() {
         )}
       </div>
 
-      {/* Confirmation Modal */}
       {showConfirmation && (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
           <div className="bg-white p-8 rounded-lg shadow-xl text-center max-w-sm w-full">
@@ -191,7 +196,6 @@ export default function CartPage() {
         </div>
       )}
 
-      {/* Persistent Downloads Button */}
       {purchaseComplete && !showConfirmation && (
         <div className="fixed bottom-4 right-4 z-50">
           <button

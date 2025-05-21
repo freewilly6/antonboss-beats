@@ -1,21 +1,31 @@
-// components/LicenseModal.jsx
+// src/components/LicenseModal.jsx
+
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabaseClient';
-import { useCart } from '@/context/CartContext';
-import { useLicenseModal } from '@/context/LicenseModalContext';
-import { useRouter } from 'next/router';
+import { useRouter }            from 'next/router';
+import { supabase }             from '../lib/supabaseClient';
+import { useCart }              from '@/context/CartContext';
+import { useLicenseModal }      from '@/context/LicenseModalContext';
 
 export default function LicenseModal() {
-  const { selectedBeat, closeLicenseModal } = useLicenseModal();
-  const { addToCart, cart } = useCart();
-  const router = useRouter();
-
+  const router                        = useRouter();
+  const { isOpen, beat, closeLicenseModal } = useLicenseModal();
+  const { addToCart, cart }          = useCart();
   const [purchasedIds, setPurchasedIds] = useState([]);
 
-  // reload purchases any time we open for a new beat
+  // Load exactly the same "beats" JSON you use on DownloadsPage,
+  // but normalize every combo into a clean "BeatName-LicenseName" string.
   useEffect(() => {
-    async function loadPurchases() {
-      const { data: { session } } = await supabase.auth.getSession();
+    if (!isOpen) return;
+
+    (async () => {
+      const {
+        data: { session },
+        error: sessErr,
+      } = await supabase.auth.getSession();
+      if (sessErr) {
+        console.error('Session error:', sessErr);
+        return;
+      }
       if (!session) return;
 
       const { data: purchases, error } = await supabase
@@ -23,120 +33,163 @@ export default function LicenseModal() {
         .select('beats')
         .eq('user_id', session.user.id);
 
-      if (!error && purchases) {
-        const ids = purchases.flatMap(p => p.beats || []).map(b => b.id);
-        setPurchasedIds(ids);
+      if (error) {
+        console.error('Error loading purchases:', error);
+        return;
       }
-    }
-    if (selectedBeat) loadPurchases();
-  }, [selectedBeat]);
 
-  if (!selectedBeat) return null;
+      const ids = purchases.flatMap(purchase => {
+        let arr = purchase.beats;
+        // Supabase JSON columns usually come back as objects/arrays,
+        // but if yours is text, parse it.
+        if (typeof arr === 'string') {
+          try {
+            arr = JSON.parse(arr);
+          } catch (e) {
+            console.error('Failed to parse beats JSON:', e);
+            arr = [];
+          }
+        }
+        return (arr || []).map(item => {
+          // 1) Prefer the stored combo (id or beatId) if it isn’t clearly broken
+          let raw = null;
+          if (
+            typeof item.id === 'string' &&
+            !/^undefined-/.test(item.id) &&
+            !/^-/.test(item.id)
+          ) {
+            raw = item.id;
+          } else if (
+            typeof item.beatId === 'string' &&
+            !/^undefined-/.test(item.beatId) &&
+            !/^-/.test(item.beatId)
+          ) {
+            raw = item.beatId;
+          } else if (item.name && item.license) {
+            // 2) Fallback to name+license
+            raw = `${encodeURIComponent(item.name)}-${item.license}`;
+          }
 
-  // ─── normalize IDs & URLs ─────────────────────────────────────────────
-  const {
-    id: raw1,
-    beatId: raw2,
-    beat_id: raw3,
-    name,
-    cover,
-    audioUrl,
-    audiourl,
-    wav,
-    stems,
-  } = selectedBeat;
+          if (!raw) return null;
 
-  const beatId     = raw1 ?? raw2 ?? raw3;
-  const fallback   = name ?? audioUrl ?? 'unknown-beat';
-  const baseKey    = beatId ?? encodeURIComponent(fallback);
-  const beatTitle  = name ?? 'Untitled';
-  const coverUrl   = cover ?? '/images/beats/default-cover.png';
+          // 3) Decode any %20 left over
+          try {
+            return decodeURIComponent(raw);
+          } catch {
+            return raw;
+          }
+        })
+        .filter(Boolean);
+      });
+
+      console.log('purchasedIds:', ids);
+      setPurchasedIds(ids);
+    })();
+  }, [isOpen]);
+
+  if (!isOpen || !beat) return null;
+
+  // Use the human name here so it lines up with our decoded combos
+  const title    = beat.name || beat.title || 'Untitled';
+  const coverUrl = beat.cover || '/images/beats/default-cover.png';
 
   const licenses = [
-    { name: 'Basic License',       price: 24.99,  terms: 'MP3 | Personal Use',      fileUrl: audioUrl ?? audiourl ?? null },
-    { name: 'Premium License',     price: 49.99,  terms: 'MP3 + WAV',               fileUrl: wav ?? null },
-    { name: 'Premium Plus License',price: 99.99,  terms: 'MP3 + WAV + STEMS',      fileUrl: stems ?? null },
-    { name: 'Unlimited License',   price: 159.99, terms: 'Full Package',           fileUrl: stems ?? null },
-    { name: 'Exclusive License',   price: 'MAKE AN OFFER', terms: 'Negotiate',     fileUrl: null },
+    { name: 'Basic License',        price: 24.99, terms: 'MP3 | Personal Use',   url: beat.audiourl || beat.audioUrl || null },
+    { name: 'Premium License',      price: 34.99, terms: 'MP3 + WAV',            url: beat.wav || null },
+    { name: 'Premium Plus License', price: 49.99, terms: 'MP3 + WAV + STEMS',   url: beat.stems || null },
+    { name: 'Unlimited License',    price: 99.99, terms: 'Full Package',        url: beat.stems || null },
+    { name: 'Exclusive License',    price: null,  terms: 'Negotiate',           url: null },
   ];
 
-  const handleClick = (lic) => {
-    const thisId = `${baseKey}-${lic.name}`;
+  function handleClick(lic) {
+    // Build the same "BeatName-LicenseName" combo we decoded above
+    const combo = `${title}-${lic.name}`;
 
-    // 1️⃣ prevent re-adding
-    if (purchasedIds.includes(thisId) || cart.some(item => item.id === thisId)) {
+    // Already purchased?
+    if (purchasedIds.includes(combo)) {
       return;
     }
 
-    // 2️⃣ exclusive → contact form
+    // Exclusive license → contact form
     if (lic.name === 'Exclusive License') {
       closeLicenseModal();
-      return router.push('/contact');
+      router.push('/contact');
+      return;
     }
 
-    // 3️⃣ finally, add to cart (even if fileUrl is null)
+    // Otherwise add to cart
     addToCart({
-      id:          thisId,
-      name:        beatTitle,
-      price:       lic.price,
-      licenseType: lic.name,
-      cover:       coverUrl,
-      audioUrl:    lic.fileUrl,
+      id:           combo,        // so inCart() sees it
+      beatId:       beat.id,      // real supabase ID if you need it later
+      name:         title,
+      title:        beat.title || '',
+      cover:        coverUrl,
+      licenseType:  lic.name,
+      price:        lic.price || 0,
+      audioUrl:     lic.url,
+      wav:          beat.wav   || null,
+      stems:        beat.stems || null,
     });
 
     closeLicenseModal();
-  };
+  }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black bg-opacity-70 flex items-center justify-center px-4">
-      <div className="relative bg-gray-900 text-white p-6 rounded-lg max-w-3xl w-full">
+    <div className="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4">
+      <div className="relative bg-gray-900 text-white rounded-lg w-full max-w-2xl overflow-hidden">
+        {/* close */}
         <button
           onClick={closeLicenseModal}
           className="absolute top-4 right-4 text-2xl hover:text-pink-400"
-        >✕</button>
+        >
+          ✕
+        </button>
 
-        <div className="flex items-center gap-4 mb-6">
-          <img src={coverUrl} alt={beatTitle} className="w-20 h-20 rounded" />
-          <h2 className="text-2xl font-bold">
-            {beatTitle} — Choose License
-          </h2>
+        {/* header */}
+        <div className="flex items-center gap-3 bg-gray-800 p-4">
+          <img src={coverUrl} alt={title} className="w-16 h-16 rounded object-cover" />
+          <h2 className="text-2xl font-bold">{title} — Choose License</h2>
         </div>
 
-        {licenses.map(lic => {
-          const thisId        = `${baseKey}-${lic.name}`;
-          const isPurchased   = purchasedIds.includes(thisId);
-          const isInCart      = cart.some(item => item.id === thisId);
-          const disabled      = isPurchased || isInCart;
+        {/* options */}
+        <div className="p-4 space-y-3">
+          {licenses.map(lic => {
+            const combo  = `${title}-${lic.name}`;
+            const bought = purchasedIds.includes(combo);
+            const inCart = cart.some(item => item.id === combo);
 
-          // label logic
-          let label;
-          if (isPurchased)      label = 'Purchased';
-          else if (isInCart)    label = 'Added';
-          else if (typeof lic.price === 'number')
-            label = `+ $${lic.price.toFixed(2)}`;
-          else
-            label = `+ ${lic.price}`;
+            let label, btnClass;
+            if (bought) {
+              label    = 'Purchased';
+              btnClass = 'bg-gray-600 text-gray-300 cursor-not-allowed';
+            } else if (inCart) {
+              label    = 'Added';
+              btnClass = 'bg-gray-600 text-gray-300 cursor-not-allowed';
+            } else if (lic.name === 'Exclusive License') {
+              label    = 'Contact';
+              btnClass = 'border-2 border-pink-300 text-pink-300 hover:bg-pink-500 hover:text-white';
+            } else {
+              label    = `+ $${lic.price.toFixed(2)}`;
+              btnClass = 'bg-pink-300 text-black hover:bg-pink-500';
+            }
 
-          return (
-            <div key={lic.name} className="flex justify-between p-4 bg-gray-800 rounded mb-3">
-              <div>
-                <h4 className="font-semibold">{lic.name}</h4>
-                <p className="text-sm text-gray-400">{lic.terms}</p>
+            return (
+              <div key={lic.name} className="flex justify-between items-center bg-gray-800 rounded p-4">
+                <div>
+                  <h4 className="font-semibold">{lic.name}</h4>
+                  <p className="text-sm text-gray-400">{lic.terms}</p>
+                </div>
+                <button
+                  disabled={bought || inCart}
+                  onClick={() => handleClick(lic)}
+                  className={`${btnClass} px-4 py-2 rounded font-semibold transition`}
+                >
+                  {label}
+                </button>
               </div>
-              <button
-                disabled={disabled}
-                onClick={() => handleClick(lic)}
-                className={`px-4 py-2 rounded font-bold transition ${
-                  disabled
-                    ? 'bg-gray-600 text-gray-300 cursor-not-allowed'
-                    : 'bg-pink-300 text-black hover:bg-pink-400'
-                }`}
-              >
-                {label}
-              </button>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     </div>
   );

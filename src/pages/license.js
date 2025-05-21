@@ -10,17 +10,17 @@ const licenses = [
   },
   {
     name: 'Premium License',
-    price: '$49.99',
+    price: '$34.99',
     terms: `This Non-Exclusive Premium License Agreement...`,
   },
   {
     name: 'Premium Plus License',
-    price: '$99.99',
+    price: '$49.99',
     terms: `This Non-Exclusive Premium Plus License Agreement...`,
   },
   {
     name: 'Unlimited License',
-    price: '$159.99',
+    price: '$99.99',
     terms: `This Non-Exclusive Unlimited License Agreement...`,
   },
   {

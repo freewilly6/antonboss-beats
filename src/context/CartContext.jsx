@@ -1,49 +1,65 @@
 // context/CartContext.js
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react'
 
-const CartContext = createContext();
+const CartContext = createContext()
 
 export const CartProvider = ({ children }) => {
-  console.log('✅ CartProvider mounted');
+  const [cart, setCart] = useState([])
 
-  const [cart, setCart] = useState([]);
-
+  // ── Hydrate from localStorage ───────────────────────────────
   useEffect(() => {
-    const stored = localStorage.getItem('antonboss-cart');
+    const stored = localStorage.getItem('antonboss-cart')
     if (stored) {
       try {
-        setCart(JSON.parse(stored));
+        setCart(JSON.parse(stored))
       } catch {
-        console.error('❌ Failed to parse cart');
+        console.error('❌ Failed to parse cart')
       }
     }
-  }, []);
+  }, [])
 
+  // ── Persist to localStorage ────────────────────────────────
   useEffect(() => {
-    localStorage.setItem('antonboss-cart', JSON.stringify(cart));
-  }, [cart]);
+    localStorage.setItem('antonboss-cart', JSON.stringify(cart))
+  }, [cart])
 
-  const addToCart = (newItem) => {
-    setCart((prev) => {
-      const exists = prev.some(item => item.id === newItem.id);
-      if (exists) {
-        console.warn(`⚠️ Already in cart: ${newItem.id}`);
-        return prev;
+  // ── Add a beat + license combination ───────────────────────
+  const addToCart = ({
+    beatId,        // ← the real PK from your BeatFiles table
+    name,          // ← display name
+    title,         // ← optional subtitle
+    cover,         // ← cover image URL
+    licenseType,   // ← e.g. "Premium License"
+    price,         // ← numeric price
+    audioUrl,      // ← file_path
+    wav, stems     // ← optional
+  }) => {
+    // build a React-key that's also our uniqueness check
+    const id = `${beatId}-${licenseType}`
+
+    setCart(prev => {
+      if (prev.some(item => item.id === id)) {
+        console.warn(`⚠️ Already in cart: ${id}`)
+        return prev
       }
-      return [...prev, newItem];
-    });
-  };
+      return [
+        ...prev,
+        { id, beatId, name, title, cover, licenseType, price, audioUrl, wav, stems }
+      ]
+    })
+  }
 
-  const removeFromCart = (id) =>
-    setCart((prev) => prev.filter((item) => item.id !== id));
+  // ── Remove by that same `id` ───────────────────────────────
+  const removeFromCart = id =>
+    setCart(prev => prev.filter(item => item.id !== id))
 
   const clearCart = () => {
-    setCart([]);
-    localStorage.removeItem('antonboss-cart');
-  };
+    setCart([])
+    localStorage.removeItem('antonboss-cart')
+  }
 
   const getTotal = () =>
-    cart.reduce((sum, item) => sum + Number(item.price || 0), 0);
+    cart.reduce((sum, item) => sum + Number(item.price || 0), 0)
 
   return (
     <CartContext.Provider
@@ -51,7 +67,7 @@ export const CartProvider = ({ children }) => {
     >
       {children}
     </CartContext.Provider>
-  );
-};
+  )
+}
 
-export const useCart = () => useContext(CartContext);
+export const useCart = () => useContext(CartContext)

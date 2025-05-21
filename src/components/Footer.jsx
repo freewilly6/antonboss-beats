@@ -32,7 +32,7 @@ export default function Footer() {
 
           {/* Brand spans both cols on mobile, one col on desktop */}
           <div className="col-span-2 sm:col-span-1">
-            <h3 className="text-2xl font-bold text-indigo-300">ANTONBOSS</h3>
+            <h3 className="text-2xl font-bold text-pink-300">ANTONBOSS</h3>
             <p className="mt-2 text-sm">&copy; {year} AntonBoss. All Rights Reserved.</p>
           </div>
 

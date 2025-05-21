@@ -3,13 +3,18 @@ import { createContext, useContext, useState } from 'react';
 const LicenseModalContext = createContext();
 
 export function LicenseModalProvider({ children }) {
-  const [selectedBeat, setSelectedBeat] = useState(null);
+  // `beat` holds the selected beat when open, null when closed
+  const [beat, setBeat] = useState(null);
 
-  const openLicenseModal = (beat) => setSelectedBeat(beat);
-  const closeLicenseModal = () => setSelectedBeat(null);
+  const openLicenseModal  = (selectedBeat) => setBeat(selectedBeat);
+  const closeLicenseModal = () => setBeat(null);
+
+  const isOpen = beat !== null;
 
   return (
-    <LicenseModalContext.Provider value={{ selectedBeat, openLicenseModal, closeLicenseModal }}>
+    <LicenseModalContext.Provider
+      value={{ isOpen, beat, openLicenseModal, closeLicenseModal }}
+    >
       {children}
     </LicenseModalContext.Provider>
   );

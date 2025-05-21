@@ -166,10 +166,10 @@ export default function AdminPage() {
           cover:    coverUrl,
           user_id:  user.id,
           licenses: [
-            { name:'Basic',     price:29.99,  file_path:audioUrl },
-            { name:'Standard',  price:49.99,  file_path:audioUrl },
-            { name:'Premium',   price:79.99,  file_path:audioUrl },
-            { name:'Exclusive', price:199.99, file_path:audioUrl },
+            { name:'Basic',     price:24.99,  file_path:audioUrl },
+            { name:'Premium',  price:34.99,  file_path:wavUrl },
+            { name:'Premium-Plus',   price:49.99,  file_path:stemsUrl },
+            { name:'Unlimited', price:99.99, file_path:stemsUrl },
           ],
         }]);
       if (dbErr) throw dbErr;
