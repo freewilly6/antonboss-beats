@@ -1,3 +1,4 @@
+// src/components/BeatList.jsx
 import { useState } from 'react';
 import { Listbox } from '@headlessui/react';
 import { CheckIcon } from '@heroicons/react/20/solid';
@@ -5,30 +6,37 @@ import { usePlayer } from '../context/PlayerContext';
 import BeatCarousel from './BeatCarousel';
 import { useLicenseModal } from '@/context/LicenseModalContext';
 
-
 export default function BeatList({ beats }) {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedMood,   setSelectedMood]   = useState('');
-  const [selectedKey,    setSelectedKey]    = useState('');
+  const [searchTerm, setSearchTerm]       = useState('');
+  const [selectedMood, setSelectedMood]   = useState('');
+  const [selectedKey, setSelectedKey]     = useState('');
   const [selectedArtist, setSelectedArtist] = useState('');
-  
 
-  const { playBeat } = usePlayer();
-  const { openLicenseModal } = useLicenseModal();
-  const basePrice = 24.99;
+  const { playBeat }           = usePlayer();
+  const { openLicenseModal }   = useLicenseModal();
+  const basePrice              = 24.99;
 
-  // normalize & filter out entries without audio
+  // ────────────────────────────────────────────────────────
+  // 1. Normalize & filter: include `id` explicitly here!
   const beatsWithAudio = (beats || [])
     .filter(b => b && (b.audiourl || b.audioUrl))
     .map(b => ({
-      ...b,
-      name:     b.name || b.title || 'Untitled',
-      audioUrl: b.audiourl || b.audioUrl,
+      id:       b.id        ?? b.beatId,                  // ← guarantee it
+      name:     b.name      || b.title || 'Untitled',
+      artist:   b.artist    || 'Unknown Artist',
+      audioUrl: b.audiourl  || b.audioUrl,
+      cover:    b.cover     || '/images/beats/default-cover.png',
+      genre:    b.genre     || '',
+      mood:     b.mood      || '',
+      key:      b.key       || '',
+      bpm:      b.bpm       || '',
+      licenses: b.licenses  || [],
     }));
+  // ────────────────────────────────────────────────────────
 
   // build dynamic artist list
   const artists = Array.from(
-    new Set(beatsWithAudio.map(b => b.artist || 'Unknown'))
+    new Set(beatsWithAudio.map(b => b.artist))
   ).sort();
 
   // comma-split search
@@ -40,25 +48,19 @@ export default function BeatList({ beats }) {
 
   // final filter logic
   const filteredBeats = beatsWithAudio.filter(beat => {
-     const matchesText =
+    const matchesText =
       searchTerms.length === 0 ||
-      // require that EVERY term match at least one of these fields:
       searchTerms.every(term =>
         [beat.name, beat.mood, beat.key, beat.artist, beat.genre]
-          .filter(Boolean)              // drop any undefined
-          .some(field =>
-            field.toLowerCase().includes(term)
-          )
+          .filter(Boolean)
+          .some(field => field.toLowerCase().includes(term))
       );
-
-    const matchesMood   = !selectedMood   || beat.mood   === selectedMood;
-    const matchesKey    = !selectedKey    || beat.key    === selectedKey;
-    const matchesArtist = !selectedArtist|| beat.artist === selectedArtist;
-
+    const matchesMood   = !selectedMood    || beat.mood   === selectedMood;
+    const matchesKey    = !selectedKey     || beat.key    === selectedKey;
+    const matchesArtist = !selectedArtist  || beat.artist === selectedArtist;
     return matchesText && matchesMood && matchesKey && matchesArtist;
   });
 
-  // pink→purple gradient button
   const filterBtnBase = `
     px-4 py-2
     bg-gradient-to-r from-pink-500 to-purple-500
@@ -85,9 +87,7 @@ export default function BeatList({ beats }) {
         {/* Mood */}
         <Listbox
           value={selectedMood}
-          onChange={val =>
-            setSelectedMood(prev => (prev === val ? '' : val))
-          }
+          onChange={val => setSelectedMood(prev => (prev === val ? '' : val))}
         >
           <div className="relative">
             <Listbox.Button className={filterBtnBase}>
@@ -95,9 +95,7 @@ export default function BeatList({ beats }) {
             </Listbox.Button>
             <Listbox.Options className="absolute mt-1 w-40 bg-white border rounded-lg shadow-lg z-10">
               {['Dark','Chill','Aggressive','Euphoric','Dance'].map(m => (
-                <Listbox.Option
-                  key={m}
-                  value={m}
+                <Listbox.Option key={m} value={m}
                   className={({ active }) =>
                     `flex items-center px-4 py-2 cursor-pointer ${
                       active ? 'bg-gray-100' : ''
@@ -106,12 +104,8 @@ export default function BeatList({ beats }) {
                 >
                   {({ selected }) => (
                     <>
-                      {selected && (
-                        <CheckIcon className="w-5 h-5 text-pink-500 mr-2" />
-                      )}
-                      <span className={selected ? 'font-semibold' : ''}>
-                        {m}
-                      </span>
+                      {selected && <CheckIcon className="w-5 h-5 text-pink-500 mr-2" />}
+                      <span className={selected ? 'font-semibold' : ''}>{m}</span>
                     </>
                   )}
                 </Listbox.Option>
@@ -120,14 +114,10 @@ export default function BeatList({ beats }) {
           </div>
         </Listbox>
 
-      
-
         {/* Artist */}
         <Listbox
           value={selectedArtist}
-          onChange={val =>
-            setSelectedArtist(prev => (prev === val ? '' : val))
-          }
+          onChange={val => setSelectedArtist(prev => (prev === val ? '' : val))}
         >
           <div className="relative">
             <Listbox.Button className={filterBtnBase}>
@@ -135,9 +125,7 @@ export default function BeatList({ beats }) {
             </Listbox.Button>
             <Listbox.Options className="absolute mt-1 w-48 max-h-64 overflow-auto bg-white border rounded-lg shadow-lg z-10">
               {artists.map(a => (
-                <Listbox.Option
-                  key={a}
-                  value={a}
+                <Listbox.Option key={a} value={a}
                   className={({ active }) =>
                     `flex items-center px-4 py-2 cursor-pointer ${
                       active ? 'bg-gray-100' : ''
@@ -146,12 +134,8 @@ export default function BeatList({ beats }) {
                 >
                   {({ selected }) => (
                     <>
-                      {selected && (
-                        <CheckIcon className="w-5 h-5 text-pink-500 mr-2" />
-                      )}
-                      <span className={selected ? 'font-semibold' : ''}>
-                        {a}
-                      </span>
+                      {selected && <CheckIcon className="w-5 h-5 text-pink-500 mr-2" />}
+                      <span className={selected ? 'font-semibold' : ''}>{a}</span>
                     </>
                   )}
                 </Listbox.Option>
@@ -189,28 +173,27 @@ export default function BeatList({ beats }) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {filteredBeats.map(beat => (
                 <div
-                key={beat.id}
-                className="p-4 rounded-lg border hover:shadow-md transition flex items-center gap-4 cursor-pointer"
-                onClick={() => playBeat(beat)}
-              >
-                <img
-                  src={beat.cover || '/images/beats/default-cover.png'}
-                  alt={beat.name}
-                  className="w-16 h-16 rounded object-cover"
-                />
+                  key={beat.id}
+                  className="p-4 rounded-lg border hover:shadow-md transition flex items-center gap-4 cursor-pointer"
+                  onClick={() => playBeat(beat)}  // sends full beat, including id
+                >
+                  <img
+                    src={beat.cover}
+                    alt={beat.name}
+                    className="w-16 h-16 rounded object-cover"
+                  />
                   <div className="flex flex-col flex-grow">
                     <h3 className="text-lg font-bold">{beat.name}</h3>
                     <p className="text-gray-500 text-sm">
                       {beat.genre || 'N/A'} | {beat.mood || 'N/A'} |{' '}
-                      {beat.key || 'N/A'} |{' '}
-                      {beat.bpm ? `${beat.bpm}` : 'N/A'} |{' '}
-                      {beat.artist || 'Unknown'}
+                      {beat.key || 'N/A'} | {beat.bpm || 'N/A'} |{' '}
+                      {beat.artist}
                     </p>
                   </div>
                   <button
                     onClick={e => {
                       e.stopPropagation();
-                      openLicenseModal(beat);
+                      openLicenseModal(beat);   // also gets full beat with id
                     }}
                     className="
                       bg-gradient-to-r from-pink-500 to-purple-500

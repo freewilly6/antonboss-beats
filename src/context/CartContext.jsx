@@ -6,36 +6,54 @@ const CartContext = createContext()
 export const CartProvider = ({ children }) => {
   const [cart, setCart] = useState([])
 
-  // ── Hydrate from localStorage ───────────────────────────────
+  // ── 1) Hydrate & clean from localStorage ────────────────────
   useEffect(() => {
     const stored = localStorage.getItem('antonboss-cart')
-    if (stored) {
-      try {
-        setCart(JSON.parse(stored))
-      } catch {
-        console.error('❌ Failed to parse cart')
-      }
+    if (!stored) return
+
+    try {
+      const parsed = JSON.parse(stored)
+
+      // Coerce beatId → number, filter out bad entries
+      const cleaned = parsed
+        .map(item => ({
+          ...item,
+          beatId: Number(item.beatId),
+        }))
+        .filter(item => Number.isInteger(item.beatId))
+
+      setCart(cleaned)
+    } catch (err) {
+      console.error('❌ Failed to parse or clean stored cart:', err)
     }
   }, [])
 
-  // ── Persist to localStorage ────────────────────────────────
+  // ── 2) Persist to localStorage on every change ──────────────
   useEffect(() => {
     localStorage.setItem('antonboss-cart', JSON.stringify(cart))
   }, [cart])
 
-  // ── Add a beat + license combination ───────────────────────
+  // ── 3) Add a beat + license combo ─────────────────────────
   const addToCart = ({
-    beatId,        // ← the real PK from your BeatFiles table
-    name,          // ← display name
-    title,         // ← optional subtitle
-    cover,         // ← cover image URL
-    licenseType,   // ← e.g. "Premium License"
-    price,         // ← numeric price
-    audioUrl,      // ← file_path
-    wav, stems     // ← optional
+    beatId,       // ← raw PK from your BeatFiles table
+    name,         // ← display name
+    title,        // ← optional subtitle
+    cover,        // ← cover image URL
+    licenseType,  // ← e.g. "Premium License"
+    price,        // ← numeric price
+    audioUrl,     // ← file_path
+    wav,
+    stems         // ← optional
   }) => {
-    // build a React-key that's also our uniqueness check
-    const id = `${beatId}-${licenseType}`
+    const realBeatId = Number(beatId)
+
+    // guard: must be a valid integer ID
+    if (!Number.isInteger(realBeatId)) {
+      console.warn(`⚠️ Tried to add invalid beatId to cart:`, beatId)
+      return
+    }
+
+    const id = `${realBeatId}-${licenseType}`
 
     setCart(prev => {
       if (prev.some(item => item.id === id)) {
@@ -44,12 +62,23 @@ export const CartProvider = ({ children }) => {
       }
       return [
         ...prev,
-        { id, beatId, name, title, cover, licenseType, price, audioUrl, wav, stems }
+        {
+          id,
+          beatId:      realBeatId,
+          name,
+          title,
+          cover,
+          licenseType,
+          price:       Number(price || 0),
+          audioUrl,
+          wav,
+          stems
+        }
       ]
     })
   }
 
-  // ── Remove by that same `id` ───────────────────────────────
+  // ── 4) Remove & clear helpers ───────────────────────────────
   const removeFromCart = id =>
     setCart(prev => prev.filter(item => item.id !== id))
 
@@ -58,8 +87,9 @@ export const CartProvider = ({ children }) => {
     localStorage.removeItem('antonboss-cart')
   }
 
+  // ── 5) Total calculator ────────────────────────────────────
   const getTotal = () =>
-    cart.reduce((sum, item) => sum + Number(item.price || 0), 0)
+    cart.reduce((sum, item) => sum + (Number(item.price) || 0), 0)
 
   return (
     <CartContext.Provider

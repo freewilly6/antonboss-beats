@@ -1,4 +1,4 @@
-// BeatQueueContext.jsx
+// src/context/BeatQueueContext.jsx
 import { createContext, useContext, useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
@@ -16,7 +16,7 @@ export function BeatQueueProvider({ children }) {
     const fetchBeats = async () => {
       const { data, error } = await supabase
         .from('BeatFiles')
-        .select('id,name,artist,audiourl,cover,genre,key,bpm,licenses') // ← here
+        .select('id,name,artist,audiourl,cover,genre,key,bpm,licenses')
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -24,22 +24,26 @@ export function BeatQueueProvider({ children }) {
         return;
       }
 
+      // filter out any rows without an audio URL
       const validBeats = (data || []).filter((beat) => beat.audiourl);
 
-      const normalizedBeats = validBeats.map((beat) => ({
-        ...beat,
-        name:       beat.name || 'Untitled',
-        audioUrl:   beat.audiourl,
-        cover:      beat.cover || '/images/beats/default-cover.png',
-        artist:     beat.artist || 'Anton Boss',
-        genre:      beat.genre || 'Unknown',
-        // licenses is already an array of {name,price,file_path}
-        licenses:   beat.licenses || [],
+      // normalize every beat so it always has a numeric `id`
+      const normalizedBeats = validBeats.map((b) => ({
+        id:       b.id        ?? b.beatId,
+        name:     b.name      || 'Untitled',
+        audioUrl: b.audiourl,
+        cover:    b.cover     || '/images/beats/default-cover.png',
+        artist:   b.artist    || 'Anton Boss',
+        genre:    b.genre     || 'Unknown',
+        key:      b.key,
+        bpm:      b.bpm,
+        licenses: b.licenses  || [],
       }));
-
+console.log('🎧 normalizedBeats:', normalizedBeats)
       setQueue(normalizedBeats);
       setShuffledQueue([...normalizedBeats].sort(() => Math.random() - 0.5));
     };
+    
 
     fetchBeats();
   }, []);

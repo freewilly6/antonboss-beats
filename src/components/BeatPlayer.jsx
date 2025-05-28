@@ -158,8 +158,10 @@ export default function BeatPlayer() {
     playBeat,
   } = usePlayer();
   const { queue } = useBeatQueue();
-  const { openLicenseModal } = useLicenseModal();
+  //get modal opener
+  const { openLicenseModal: _openLicenseModal } = useLicenseModal();
   const audioRef = useRef(null);
+
 
   // STATE
   const [currentIndex, setCurrentIndex]       = useState(0);
@@ -435,7 +437,10 @@ useEffect(() => {
           title={title}
           artist={artist}
           basePrice={basePrice}
-          openLicenseModal={() => openLicenseModal(activeBeat)}
+          openLicenseModal={() => {
+            // open the license modal for the currently active beat
+            _openLicenseModal(activeBeat);
+          }}
           isExpanded={isExpanded}
           toggleExpand={() => setIsExpanded(exp => !exp)}
         />

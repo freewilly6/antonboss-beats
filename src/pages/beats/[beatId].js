@@ -74,29 +74,37 @@ export default function BeatDetail() {
 
   // license tiers for this beat
   const licenses = [
-    {
-      name:    'Basic License',
-      price:   24.99,
-      terms:   'MP3 | Personal Use',
-      fileUrl: beatData.audiourl || ''
-    },
-    {
-      name:    'Premium License',
-      price:   49.99,
-      terms:   'MP3 + WAV',
-      fileUrl: beatData.wav || ''
-    },
-    {
-      name:    'Premium Plus License',
-      price:   99.99,
-      terms:   'MP3 + WAV + STEMS',
-      fileUrl: beatData.stems || ''
-    },
+  {
+    name:      'Basic License',
+    price:     24.99,
+    terms:     'MP3 | Personal Use',
+    mp3:       beatData.audiourl,
+    wav:       null,
+    stems:     null,
+  },
+  {
+    name:      'Premium License',
+    price:     49.99,
+    terms:     'MP3 + WAV',
+    mp3:       beatData.audiourl,
+    wav:       beatData.wav,
+    stems:     null,
+  },
+  {
+    name:      'Premium Plus License',
+    price:     99.99,
+    terms:     'MP3 + WAV + STEMS',
+    mp3:       beatData.audiourl,
+    wav:       beatData.wav,
+    stems:     beatData.stems,
+  },
     {
       name:    'Unlimited License',
       price:   159.99,
       terms:   'Full Package',
-      fileUrl: beatData.stems || ''
+      mp3:       beatData.audiourl,
+      wav:       beatData.wav,
+      stems:     beatData.stems,
     },
     {
       name:    'Exclusive License',
@@ -106,20 +114,20 @@ export default function BeatDetail() {
     }
   ];
 
-  // add to cart with proper beatId
-  const handleAddToCart = (licenseName, price, fileUrl) => {
-    if (!beatData.id || !fileUrl) return;
+   // add to cart with proper beatId
+  const handleAddToCart = (lic) => {
+    if (!beatData.id) return;
 
     addToCart({
-      beatId:      beatData.id,                             // ← PASS THE REAL ID
+      beatId:      beatData.id,
       name:        beatData.name,
       title:       beatData.title,
       cover:       beatData.cover,
-      licenseType: licenseName,
-      price:       typeof price === 'number' ? price : 24.99,
-      audioUrl:    fileUrl,
-      wav:         beatData.wav || null,
-      stems:       beatData.stems || null,
+      licenseType: lic.name,
+      price:       lic.price,
+      audioUrl:    lic.mp3,
+      wav:         lic.wav,
+      stems:       lic.stems,
     });
     router.push('/cart');
   };
@@ -137,7 +145,7 @@ export default function BeatDetail() {
               <button
                 key={lic.name}
                 disabled={already}
-                onClick={() => handleAddToCart(lic.name, lic.price, lic.fileUrl)}
+                onClick={() => handleAddToCart(lic)}
                 className={`m-2 inline-block bg-gradient-to-r from-purple-600 to-pink-600 
                   hover:from-purple-500 hover:to-pink-500 text-white font-bold py-3 px-6 
                   rounded-full text-lg uppercase tracking-wider transition-all 

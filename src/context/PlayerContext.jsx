@@ -9,9 +9,16 @@ export function PlayerProvider({ children }) {
   const [playbackTime, setPlaybackTime] = useState(0);
 
   const playBeat = (beat) => {
-    setCurrentBeat(beat);          // ✅ THIS is correct
-    setShouldAutoPlay(true);       // ✅ Set autoplay only for manual triggers
-    setPlaybackTime(0);            // ✅ Reset playback time on new beat
+    // normalize id: prefer beat.id, fall back to beat.beatId
+    const normalizedId = beat.id ?? beat.beatId;
+
+    setCurrentBeat({
+      ...beat,
+      id: normalizedId,
+    });
+
+    setShouldAutoPlay(true);
+    setPlaybackTime(0);
   };
 
   return (

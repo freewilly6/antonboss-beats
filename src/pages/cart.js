@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { createClient } from '@supabase/supabase-js';
-import { PayPalButtons } from '@paypal/react-paypal-js';
 
+
+import dynamic from 'next/dynamic'
 import { useCart } from '../context/CartContext';
 import Layout from '../components/Layout';
 
@@ -43,46 +44,66 @@ export default function CartPage() {
     };
     checkAuth();
   }, [router]);
-
+const PayPalButtons = dynamic(
+  () => import('@paypal/react-paypal-js').then(mod => mod.PayPalButtons),
+  { ssr: false }
+)
   const handlePayPalApproval = async (details) => {
-    try {
-      // ── sanity‐check & build payload ───────────────────────────
-      const payloadItems = cart.map(item => {
-        if (typeof item.beatId !== 'number') {
-          console.error('Cart item missing beatId!', item);
-          throw new Error('Cart is in an invalid state: missing beatId');
-        }
-        return {
-          beatId:      item.beatId,
-          licenseName: item.licenseType,
-        };
-      });
+  try {
+   // ── 1) Build your payload off the canonical beatId ─────────
+const payloadItems = cart.map(item => ({
+  beatId:      item.beatId,          // always what you passed into addToCart
+  licenseName: item.licenseType,
+}));
 
-      const response = await fetch('/api/complete-purchase', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          orderID: details.id,
-          items:   payloadItems,
-        }),
-      });
+// (Optional) If you really need to enforce integer IDs
+// you could still check here, but supabase integer PKs come through as numbers anyway.
+// const bad = payloadItems.filter(pi => typeof pi.beatId !== 'number');
+// if (bad.length) { … }
 
-      const result = await response.json();
-      if (!response.ok || !result.success) {
+
+   // ── 2) Call your purchase‐finalization endpoint ────────────
+const response = await fetch('/api/complete-purchase', {
+  method:  'POST',
+  headers: {
+    'Content-Type':  'application/json',
+    Authorization:    `Bearer ${accessToken}`,
+  },
+  body: JSON.stringify({
+    orderID: details.id,
+    items:   payloadItems,
+  }),
+});
+
+
+    const result = await response.json();
+    if (!response.ok) {
+      // Special‐case “not found” so you can report it cleanly
+      if (result.error?.includes('not found')) {
+        alert(
+          'One of the beats you tried to purchase could not be found. ' +
+          'It may have been removed—please refresh and try again.'
+        );
+      } else {
         throw new Error(result.error || 'Failed to finalize purchase');
       }
-
-      clearCart();
-      setPurchaseComplete(true);
-      setShowConfirmation(true);
-    } catch (err) {
-      console.error('❌ Purchase failed:', err);
-      alert('Payment succeeded, but something went wrong on our end. Please contact support.');
+      return;
     }
-  };
+
+    // ── 4) Success! ────────────────────────────────────────────
+    clearCart();
+    setPurchaseComplete(true);
+    setShowConfirmation(true);
+
+  } catch (err) {
+    console.error('❌ Purchase failed:', err);
+    alert(
+      'Payment succeeded, but something went wrong on our end. ' +
+      'Please contact support with this message:\n\n' +
+      err.message
+    );
+  }
+};
 
   if (loading) return null;
 

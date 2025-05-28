@@ -4,22 +4,23 @@ import { useEffect, useState } from "react";
 import { CartProvider } from "@/context/CartContext";
 import { PlayerProvider, usePlayer } from "@/context/PlayerContext";
 import { BeatQueueProvider } from "@/context/BeatQueueContext";
+
+// 1) import your License modal context + component
 import { LicenseModalProvider } from "@/context/LicenseModalContext";
-import BeatPlayer from "@/components/BeatPlayer";
 import LicenseModal from "@/components/LicenseModal";
+
+import BeatPlayer from "@/components/BeatPlayer";
 import { PayPalScriptProvider } from "@paypal/react-paypal-js";
 
-// ✅ Supabase setup
 import { createBrowserClient } from "@supabase/ssr";
 import Cookies from "js-cookie";
 
-// ✅ Your custom browser Supabase client
 const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-// Optional: Global player mount logic
+// Keep this as-is: a little wrapper so the player only mounts on the client
 function GlobalBeatPlayer() {
   const { currentBeat } = usePlayer();
   const [hasMounted, setHasMounted] = useState(false);
@@ -33,19 +34,15 @@ export default function App({ Component, pageProps }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log("Auth event:", event, session);
-
       if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
         Cookies.set("sb-access-token", session.access_token, { path: "/" });
         Cookies.set("sb-refresh-token", session.refresh_token, { path: "/" });
       }
-
       if (event === "SIGNED_OUT") {
         Cookies.remove("sb-access-token");
         Cookies.remove("sb-refresh-token");
       }
     });
-
     return () => subscription.unsubscribe();
   }, []);
 
@@ -59,12 +56,14 @@ export default function App({ Component, pageProps }) {
       <CartProvider>
         <PlayerProvider>
           <BeatQueueProvider>
+            {/* 2) Wrap everything that might call openLicenseModal */}
             <LicenseModalProvider>
               <div className="min-h-screen flex flex-col">
                 <div className="flex-grow">
                   <Component {...pageProps} />
                 </div>
                 <GlobalBeatPlayer />
+                {/* 3) Mount the modal so it can render on top of any page */}
                 <LicenseModal />
               </div>
             </LicenseModalProvider>

@@ -1,3 +1,4 @@
+// src/components/BeatCarousel.jsx
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { EffectCoverflow, Navigation, Keyboard } from 'swiper/modules';
 import { usePlayer } from '@/context/PlayerContext';
@@ -11,18 +12,17 @@ import 'swiper/css/keyboard';
 export default function BeatCarousel({ beats }) {
   const { playBeat, currentBeat } = usePlayer();
 
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Simply forward the full beat (with its id) into playBeat
   const handleSelectBeat = (beat) => {
     const currentUrl = currentBeat?.audioUrl || currentBeat?.audiourl;
     const beatUrl    = beat.audioUrl    || beat.audiourl;
     if (currentUrl === beatUrl) return;
 
-    playBeat({
-      name:     beat.name       || beat.title            || 'Untitled',
-      audioUrl: beatUrl,
-      cover:    beat.cover      || '/images/beats/default-cover.png',
-      artist:   beat.artistType || beat.artist           || 'Anton Boss',
-    });
+    // pass the entire beat object—including its id—into the player
+    playBeat(beat);
   };
+  // ─────────────────────────────────────────────────────────────────────────────
 
   return (
     <div className="w-full max-w-5xl mx-auto mt-10">
@@ -46,10 +46,13 @@ export default function BeatCarousel({ beats }) {
         {beats.map((beat) => {
           const title     = beat.name       || beat.title || 'Untitled';
           const cover     = beat.cover      || '/images/beats/default-cover.png';
-          const infoParts = [
-            beat.genre, beat.mood, beat.key, beat.bpm,
-            beat.artistType || beat.artist,
-          ].filter(Boolean);
+           const infoParts = [
+   beat.genre      || 'Unknown genre',
+   beat.mood       || 'No mood set',
+   beat.key        || 'Unknown key',
+   beat.bpm        || '—',
+   beat.artistType || beat.artist || '—',
+ ];
 
           const beatUrl = beat.audioUrl || beat.audiourl;
           const isActive = currentBeat?.audioUrl === beatUrl;
@@ -94,9 +97,6 @@ export default function BeatCarousel({ beats }) {
                       className="object-cover"
                     />
                   </div>
-
-           
-
                 </div>
 
                 {/* STATIC CENTER RING */}
@@ -112,16 +112,16 @@ export default function BeatCarousel({ beats }) {
               </div>
 
               {/* META UNDERNEATH */}
-<div className="mt-4 w-[280px] mx-auto text-center">
-  {infoParts.length > 0 && (
-    <p className="text-sm text-gray-500 mb-1">
-      {infoParts.join(' | ')}
-    </p>
-  )}
-  <p className="text-2xl font-semibold text-black">
-    {title}
-  </p>
-</div>
+              <div className="mt-4 w-[280px] mx-auto text-center">
+                {infoParts.length > 0 && (
+                  <p className="text-sm text-gray-500 mb-1">
+                    {infoParts.join(' | ')}
+                  </p>
+                )}
+                <p className="text-2xl font-semibold text-black">
+                  {title}
+                </p>
+              </div>
             </SwiperSlide>
           );
         })}

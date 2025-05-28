@@ -1,58 +1,109 @@
-// src/components/BeatCard.jsx
-import { usePlayer } from '@/context/PlayerContext';
-import { useLicenseModal } from '@/context/LicenseModalContext';
+// src/components/BeatPlayer.jsx
+import React, {
+  useRef,
+  useState,
+  useEffect,
+  useCallback,
+  useMemo
+} from 'react'
+import { usePlayer }       from '@/context/PlayerContext'
+import { useBeatQueue }    from '@/context/BeatQueueContext'
+import BeatQueuePanel      from './BeatQueuePanel'
+import { useLicenseModal } from '@/context/LicenseModalContext'
+// … your Heroicons imports …
 
-export default function BeatCard({ beat }) {
-  const { playBeat } = usePlayer();
-  const { openLicenseModal } = useLicenseModal();
-  const basePrice = 24.99;
+// … shuffleArray, CoverInfo, Controls as before …
 
-  const title    = beat?.name  || beat?.title || 'Untitled';
-  const audioUrl = beat?.audiourl || beat?.audioUrl;
-  const cover    = beat?.cover || '/images/beats/default-cover.png';
+export default function BeatPlayer() {
+  const {
+    currentBeat,
+    shouldAutoPlay,
+    setShouldAutoPlay,
+    playbackTime,
+    setPlaybackTime,
+    playBeat,
+  } = usePlayer()
+  const { queue } = useBeatQueue()
+  const { openLicenseModal } = useLicenseModal()
+  const audioRef = useRef(null)
 
-  const handlePlay = () => {
-    if (!audioUrl) {
-      console.warn('⚠️ Missing audio URL for beat:', beat);
-      return;
+  // … all your existing state, refs, effects, handlers …
+
+  // derive activeBeat
+  const currentQueue = useMemo(
+    () => (isShuffled ? localShuffledQueue : queue),
+    [isShuffled, queue, localShuffledQueue]
+  )
+  const activeBeat = useMemo(
+    () => currentBeat || currentQueue[currentIndex],
+    [currentBeat, currentQueue, currentIndex]
+  )
+
+  // … metadata calculations …
+  const title      = activeBeat?.name   || 'Untitled'
+  const artist     = activeBeat?.artist || 'Unknown'
+  const coverImage = activeBeat?.cover  || '/images/beats/default-cover.png'
+  const audioUrl   = activeBeat?.audioUrl || ''
+  const basePrice  = useMemo(
+    () => activeBeat?.price ?? 24.99,
+    [activeBeat]
+  )
+
+  // ── NEW: guard + log before opening modal ───────────────────────────
+  const handleOpenLicense = useCallback(() => {
+    console.log('BeatPlayer: opening license for activeBeat:', activeBeat)
+    if (!activeBeat || !activeBeat.id) {
+      console.error('BeatPlayer: activeBeat.id is missing!', activeBeat)
+      return
     }
-    playBeat({
-      id:       beat.id,      // include id here too if your player uses it
-      name:     title,
-      audioUrl,
-      cover,
-      artist:   beat.artist  || 'Anton Boss',
-      genre:    beat.genre   || '',
-      price:    basePrice,
-    });
-  };
+    openLicenseModal(activeBeat)
+  }, [activeBeat, openLicenseModal])
 
-  const handleBuy = (e) => {
-    e.stopPropagation();        // prevent triggering the play on parent div
-    openLicenseModal(beat);     // pass the *entire* beat, id included!
-  };
+  // … the rest of your handlers (togglePlay, skipNext, skipBack, etc.) …
 
   return (
-    <div
-      className="rounded shadow-lg hover:shadow-xl transition-shadow bg-white"
-      onClick={handlePlay}
-    >
-      <img
-        src={cover}
-        alt={title}
-        className="rounded-t w-full h-48 object-cover"
-      />
-      <div className="p-4 space-y-2">
-        <h3 className="font-bold text-lg">{title}</h3>
-        <p className="text-gray-600 text-sm">By {beat?.artist || 'Anton Boss'}</p>
-        <p className="text-pink-600 font-semibold">From ${basePrice.toFixed(2)}</p>
-        <button
-          onClick={handleBuy}
-          className="mt-2 w-full bg-pink-500 hover:bg-pink-600 text-white font-semibold py-2 rounded"
-        >
-          Buy
-        </button>
+    <div className="fixed bottom-0 left-0 w-full bg-gray-900 text-white z-50 shadow-xl">
+      <audio ref={audioRef} />
+
+      {/* progress bar */} 
+      {/* … */}
+
+      {/* main controls */} 
+      <div className="relative flex flex-col sm:flex-row items-center sm:justify-between px-4 sm:px-6 py-2 space-y-2 sm:space-y-0">
+        <CoverInfo
+          coverImage={coverImage}
+          title={title}
+          artist={artist}
+          basePrice={basePrice}
+          // ← use our guarded handler here:
+          openLicenseModal={handleOpenLicense}
+          isExpanded={isExpanded}
+          toggleExpand={() => setIsExpanded(exp => !exp)}
+        />
+
+        <div className="flex flex-col items-center
+                        sm:absolute sm:left-1/2 sm:top-1/2
+                        sm:transform sm:-translate-x-1/2 sm:-translate-y-1/2">
+          <Controls
+            // … your controls props …
+          />
+          {/* playtime display */}
+        </div>
+
+        {/* volume & expand button */}
       </div>
+
+      {isExpanded && (
+        <BeatQueuePanel
+          queue={currentQueue}
+          currentIndex={currentIndex}
+          onSelect={i => {
+            setCurrentIndex(i)
+            playBeat(currentQueue[i])
+            setShouldAutoPlay(true)
+          }}
+        />
+      )}
     </div>
-  );
+  )
 }

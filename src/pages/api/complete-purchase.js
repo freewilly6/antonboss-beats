@@ -1,10 +1,13 @@
+// pages/api/complete-purchase.js
+
 import fetch from 'node-fetch'
-import { supabaseAdmin } from '../../lib/supabaseAdmin'  // service-role client
+import { supabaseAdmin } from '../../lib/supabaseAdmin'
 
 // PayPal endpoint (sandbox vs prod)
-const PAYPAL_API = process.env.NODE_ENV === 'production'
-  ? 'https://api.paypal.com'
-  : 'https://api-m.sandbox.paypal.com'
+const PAYPAL_API =
+  process.env.NODE_ENV === 'production'
+    ? 'https://api.paypal.com'
+    : 'https://api-m.sandbox.paypal.com'
 
 async function getPayPalToken() {
   const basic = Buffer
@@ -30,57 +33,88 @@ async function getPayPalToken() {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Only POST allowed' })
+    res.setHeader('Allow', 'POST')
+    return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  // ── 1) Extract & verify Supabase JWT ───────────────────────────────
+  // 1) Auth
   const auth = req.headers.authorization
   if (!auth?.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Missing Authorization header' })
   }
   const jwt = auth.split(' ')[1]
-  const { data: { user }, error: userErr } = await supabaseAdmin.auth.getUser(jwt)
-  if (userErr || !user) {
-    return res.status(401).json({ error: 'Invalid or expired token' })
+  let user
+  try {
+    const { data, error: userErr } = await supabaseAdmin.auth.getUser(jwt)
+    if (userErr || !data.user) {
+      return res.status(401).json({ error: 'Invalid or expired token' })
+    }
+    user = data.user
+  } catch (err) {
+    console.error('[complete-purchase] auth error:', err)
+    return res.status(500).json({ error: 'Error validating user session' })
   }
-  const userId = user.id
 
-  // ── 2) Parse payload ────────────────────────────────────────────────
-  const { orderID, items } = req.body
+  // 2) Parse & very basic validation
+  const { orderID, items } = req.body || {}
+  console.log('[complete-purchase] incoming body:', JSON.stringify(req.body, null, 2))
+
   if (!orderID || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'Missing orderID or items' })
   }
 
   try {
-    // ── 3) Verify PayPal order is COMPLETED ────────────────────────────
+    // 3) Verify PayPal order
     const token = await getPayPalToken()
     const ppRes = await fetch(`${PAYPAL_API}/v2/checkout/orders/${orderID}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
     if (!ppRes.ok) {
       const detail = await ppRes.text()
+      console.error('[complete-purchase] PayPal lookup failed:', detail)
       return res.status(400).json({ error: 'PayPal lookup failed', detail })
     }
     const orderData = await ppRes.json()
     if (orderData.status !== 'COMPLETED') {
+      console.error('[complete-purchase] Order not completed:', orderData.status)
       return res.status(400).json({ error: 'Order not completed', status: orderData.status })
     }
     const paidAmount = parseFloat(orderData.purchase_units[0].amount.value)
 
-    // ── 4) Recalculate expected total & enrich beats ───────────────────
-    const beatIds = [...new Set(items.map(i => i.beatId))]
+    // 4) Validate & coerce beatIds
+    const validatedItems = items.map(i => ({
+      beatId:      Number(i.beatId),
+      licenseName: i.licenseName,
+    }))
+    const invalid = validatedItems.filter(i => !Number.isInteger(i.beatId))
+    if (invalid.length) {
+      console.error('[complete-purchase] invalid beatId(s):', invalid)
+      return res.status(400).json({ error: 'One or more items missing a valid beatId', invalid })
+    }
+
+    // 5) Fetch beat metadata
+    const beatIds = [...new Set(validatedItems.map(i => i.beatId))]
     const { data: beats, error: beatErr } = await supabaseAdmin
       .from('BeatFiles')
-      .select('id, name, licenses')
+      .select('id, name, licenses, cover, wav, stems')
       .in('id', beatIds)
-    if (beatErr) throw beatErr
 
+    if (beatErr) {
+      console.error('[complete-purchase] fetching beats failed:', beatErr)
+      throw beatErr
+    }
+
+    // 6) Recalculate & enrich
     let expectedTotal = 0
-    const enriched = items.map(({ beatId, licenseName }) => {
+    const enriched = validatedItems.map(({ beatId, licenseName }) => {
       const beat = beats.find(b => b.id === beatId)
-      if (!beat) throw new Error(`Beat ${beatId} not found`)
+      if (!beat) {
+        throw new Error(`Beat ${beatId} not found`)
+      }
       const lic = (beat.licenses || []).find(l => l.name === licenseName)
-      if (!lic) throw new Error(`License ${licenseName} not on beat ${beatId}`)
+      if (!lic) {
+        throw new Error(`License ${licenseName} not on beat ${beatId}`)
+      }
       expectedTotal += lic.price
       return {
         id:       beatId,
@@ -88,14 +122,19 @@ export default async function handler(req, res) {
         license:  licenseName,
         price:    lic.price,
         audioUrl: lic.file_path,
-        cover:    lic.cover_url || null,
-        wav:      lic.wav_url   || null,
-        stems:    lic.stems_url || null,
+        cover:    beat.cover || null,
+        wav:      beat.wav   || null,
+        stems:    beat.stems || null,
       }
     })
 
-    // ── 5) Compare amounts (tiny rounding gap allowed) ────────────────
-    if (Math.abs(expectedTotal - paidAmount) > 0.005) {
+    // 7) Compare paid vs expected
+    if (Math.abs(expectedTotal - paidAmount) > 0.01) {
+      console.error(
+        '[complete-purchase] amount mismatch:',
+        'expected', expectedTotal,
+        'paid',     paidAmount
+      )
       return res.status(400).json({
         error:    'Amount mismatch',
         expected: expectedTotal,
@@ -103,24 +142,28 @@ export default async function handler(req, res) {
       })
     }
 
-    // ── 6) Write to purchases as that user ────────────────────────────
+    // 8) Write to your purchases table
     const { data: purchase, error: insertErr } = await supabaseAdmin
       .from('purchases')
       .insert([{
-        user_id:                 userId,                // ← use userId here
-        email:                   orderData.payer.email_address,
-        beats:                   enriched,
-        total:                   expectedTotal,
-        paypal_transaction_id:   orderID,
-        created_at:              new Date().toISOString(),
+        user_id:               user.id,
+        email:                 orderData.payer.email_address,
+        beats:                 enriched,
+        total:                 expectedTotal,
+        paypal_transaction_id: orderID,
+        created_at:            new Date().toISOString(),
       }])
+      .single()
 
-    if (insertErr) throw insertErr
+    if (insertErr) {
+      console.error('[complete-purchase] insert failed:', insertErr)
+      throw insertErr
+    }
 
-    // ── 7) All done! ────────────────────────────────────────────────
-    return res.status(200).json({ success: true })
+    return res.status(200).json({ success: true, purchase })
+
   } catch (err) {
-    console.error('complete-purchase error:', err)
-    return res.status(500).json({ error: err.message })
+    console.error('[complete-purchase] unexpected error:', err)
+    return res.status(500).json({ error: err.message || 'Unknown server error' })
   }
 }

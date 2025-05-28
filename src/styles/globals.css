@@ -101,13 +101,6 @@ body {
   animation: hueRotate 10s infinite linear;
 }
 
-/* Travis Scott themed font (assuming you have imported it) */
-.astroworld-text {
-  font-family: 'Cactus Jack', 'Helvetica Neue', sans-serif;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
 /* Custom input styling */
 input[type="range"] {
   -webkit-appearance: none;
@@ -127,6 +120,7 @@ input[type="range"]::-webkit-slider-thumb {
   box-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
   cursor: pointer;
 }
+
 .disc-wrapper {
   position: relative;
   width: 280px;
@@ -138,4 +132,41 @@ input[type="range"]::-webkit-slider-thumb {
 /* this sits inside the rotating layer and gets scaled up */
 .border-rotator {
   transform: scale(1.025);
+}
+
+/* ===============================
+   Custom Pink-300 Scrollbar
+   =============================== */
+
+/* 1) Prevent layout shift */
+html {
+  scrollbar-gutter: stable;
+}
+
+/* 2) Always show a vertical scrollbar slot */
+body {
+  overflow-y: scroll;
+}
+
+/* WebKit browsers (Chrome, Edge, Safari) */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+::-webkit-scrollbar-track {
+  background: #FCE7F3;  /* pink-100 */
+}
+::-webkit-scrollbar-thumb {
+  background-color: #F9A8D4;  /* pink-300 */
+  border-radius: 6px;
+  border: 3px solid #FCE7F3;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: #F472B6;  /* pink-400 */
+}
+
+/* Firefox */
+body {
+  scrollbar-width: thin;
+  scrollbar-color: #F9A8D4 #FCE7F3;
 }
