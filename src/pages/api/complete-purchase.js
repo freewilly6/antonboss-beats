@@ -96,7 +96,7 @@ export default async function handler(req, res) {
     const beatIds = [...new Set(validatedItems.map(i => i.beatId))]
     const { data: beats, error: beatErr } = await supabaseAdmin
       .from('BeatFiles')
-      .select('id, name, licenses, cover, wav, stems')
+      .select('id, name, licenses, cover')
       .in('id', beatIds)
 
     if (beatErr) {
@@ -111,20 +111,52 @@ export default async function handler(req, res) {
       if (!beat) {
         throw new Error(`Beat ${beatId} not found`)
       }
-      const lic = (beat.licenses || []).find(l => l.name === licenseName)
-      if (!lic) {
+
+      // parse & normalize licenses array
+      const licenses = typeof beat.licenses === 'string'
+        ? JSON.parse(beat.licenses)
+        : beat.licenses || []
+
+      // pull out each tier record
+      const basic     = licenses.find(l => l.name.replace(/-/g,' ').trim() === 'Basic License')
+      const premium   = licenses.find(l => l.name.replace(/-/g,' ').trim() === 'Premium License')
+      const plus      = licenses.find(l => l.name.replace(/-/g,' ').trim() === 'Premium Plus License')
+      const unlimited = licenses.find(l => l.name.replace(/-/g,' ').trim() === 'Unlimited License')
+
+      // find the one they actually bought
+      const pricedName = licenseName.replace(/-/g,' ').trim()
+      const bought = licenses.find(l =>
+        l.name.replace(/-/g,' ').trim() === pricedName
+      )
+      if (!bought) {
         throw new Error(`License ${licenseName} not on beat ${beatId}`)
       }
-      expectedTotal += lic.price
+
+      // accumulate total
+      expectedTotal += bought.price
+
       return {
         id:       beatId,
         name:     beat.name,
-        license:  licenseName,
-        price:    lic.price,
-        audioUrl: lic.file_path,
+        license:  bought.name.replace(/-/g,' ').trim(),
+        price:    bought.price,
+
+        // MP3 always from Basic tier
+        audioUrl: basic?.file_path || null,
+
         cover:    beat.cover || null,
-        wav:      beat.wav   || null,
-        stems:    beat.stems || null,
+
+        // WAV for Premium & up
+        wav: ['Premium License','Premium Plus License','Unlimited License']
+               .includes(bought.name.replace(/-/g,' ').trim())
+             ? premium?.file_path
+             : null,
+
+        // Stems for Premium Plus & Unlimited
+        stems: ['Premium Plus License','Unlimited License']
+               .includes(bought.name.replace(/-/g,' ').trim())
+             ? plus?.file_path
+             : null,
       }
     })
 
