@@ -1,27 +1,18 @@
 // src/components/BeatPlayer.jsx
-import React, {
-  useRef,
-  useState,
-  useEffect,
-  useCallback,
-  useMemo
-} from 'react';
-import { usePlayer }       from '@/context/PlayerContext';
-import { useBeatQueue }    from '@/context/BeatQueueContext';
-import BeatQueuePanel      from './BeatQueuePanel';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { usePlayer }    from '@/context/PlayerContext';
+import { useBeatQueue } from '@/context/BeatQueueContext';
+import BeatQueuePanel   from './BeatQueuePanel';
 import { useLicenseModal } from '@/context/LicenseModalContext';
 import {
-  PlayIcon,
-  PauseIcon,
-  ArrowLeftIcon,
-  ArrowRightIcon,
-  ArrowsRightLeftIcon,
-  ArrowPathIcon,
-} from '@heroicons/react/24/outline';
+  PlayIcon, PauseIcon,
+  ArrowLeftIcon, ArrowRightIcon,
+  ArrowsRightLeftIcon, ArrowPathIcon, SpeakerWaveIcon 
+} from '@heroicons/react/24/outline'; 
 
 /** Fisher–Yates shuffle */
-function shuffleArray(array) {
-  const s = [...array];
+function shuffleArray(arr) {
+  const s = [...arr];
   for (let i = s.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [s[i], s[j]] = [s[j], s[i]];
@@ -29,7 +20,6 @@ function shuffleArray(array) {
   return s;
 }
 
-/** Left block: cover art, title, artist, price + expand toggle */
 const CoverInfo = React.memo(function CoverInfo({
   coverImage, title, artist, basePrice,
   openLicenseModal, isExpanded, toggleExpand
@@ -70,22 +60,13 @@ const CoverInfo = React.memo(function CoverInfo({
   );
 });
 
-/** Center controls: shuffle, prev, play/pause, next, repeat */
 const Controls = React.memo(function Controls({
-  isPlaying,
-  onPlayPause,
-  onPrev,
-  onNext,
-  skipCooldown,
-  isShuffled,
-  onShuffle,
-  shuffleCooldown,
-  isRepeat,
-  onRepeat
+  isPlaying, onPlayPause, onPrev, onNext,
+  skipCooldown, isShuffled, onShuffle, shuffleCooldown,
+  isRepeat, onRepeat
 }) {
   return (
     <div className="flex items-center gap-4 sm:gap-5">
-      {/* Shuffle */}
       <button
         onClick={onShuffle}
         aria-label="Shuffle"
@@ -95,14 +76,11 @@ const Controls = React.memo(function Controls({
       >
         <ArrowsRightLeftIcon
           className={`h-4 w-4 sm:h-5 sm:w-5 transition-colors ${
-            isShuffled
-              ? 'text-pink-400'
-              : 'text-gray-400 hover:text-pink-400'
+            isShuffled ? 'text-pink-400' : 'text-gray-400 hover:text-pink-400'
           }`}
         />
       </button>
 
-      {/* Previous */}
       <button
         onClick={onPrev}
         aria-label="Previous"
@@ -112,14 +90,12 @@ const Controls = React.memo(function Controls({
         <ArrowLeftIcon className="h-5 w-5 sm:h-6 sm:w-6 hover:text-pink-400" />
       </button>
 
-      {/* Play / Pause */}
       <button onClick={onPlayPause} aria-label={isPlaying ? 'Pause' : 'Play'}>
         {isPlaying
           ? <PauseIcon className="h-6 w-6 sm:h-8 sm:w-8 hover:text-pink-400" />
           : <PlayIcon  className="h-6 w-6 sm:h-8 sm:w-8 hover:text-pink-400" />}
       </button>
 
-      {/* Next */}
       <button
         onClick={onNext}
         aria-label="Next"
@@ -129,7 +105,6 @@ const Controls = React.memo(function Controls({
         <ArrowRightIcon className="h-5 w-5 sm:h-6 sm:w-6 hover:text-pink-400" />
       </button>
 
-      {/* Repeat */}
       <button
         onClick={onRepeat}
         aria-label={isRepeat ? 'Disable repeat' : 'Enable repeat'}
@@ -137,9 +112,7 @@ const Controls = React.memo(function Controls({
       >
         <ArrowPathIcon
           className={`h-5 w-5 sm:h-6 sm:w-6 transition-colors ${
-            isRepeat
-              ? 'text-pink-400'
-              : 'text-gray-400 hover:text-pink-400'
+            isRepeat ? 'text-pink-400' : 'text-gray-400 hover:text-pink-400'
           }`}
         />
       </button>
@@ -147,43 +120,38 @@ const Controls = React.memo(function Controls({
   );
 });
 
-
 export default function BeatPlayer() {
+  // pull everything from PlayerContext
   const {
     currentBeat,
+    isPlaying,
+    playbackTime,
+    duration,
+    audioRef,
     shouldAutoPlay,
     setShouldAutoPlay,
-    playbackTime,
     setPlaybackTime,
     playBeat,
+    pauseBeat,
+    toggleBeat,
   } = usePlayer();
+
   const { queue } = useBeatQueue();
-  //get modal opener
   const { openLicenseModal: _openLicenseModal } = useLicenseModal();
-  const audioRef = useRef(null);
 
-
-  // STATE
-  const [currentIndex, setCurrentIndex]       = useState(0);
-  const [isPlaying,   setIsPlaying]           = useState(false);
-  const [progress,    setProgress]            = useState(0);
-  const [volume,      setVolume]              = useState(1);
-  const [duration,    setDuration]            = useState(0);
-  const [currentTime, setCurrentTime]         = useState(0);
-  const [isExpanded,  setIsExpanded]          = useState(false);
-  const [isShuffled,  setIsShuffled]          = useState(false);
-  const [isRepeat,    setIsRepeat]            = useState(false);       // ← re-added!
+  // Local UI state
+  const [currentIndex, setCurrentIndex]         = useState(0);
+  const [isExpanded, setIsExpanded]             = useState(false);
+  const [isShuffled, setIsShuffled]             = useState(false);
+  const [isRepeat, setIsRepeat]                 = useState(false);
   const [localShuffledQueue, setLocalShuffledQueue] = useState([]);
+  const [skipCooldown, setSkipCooldown]         = useState(false);
+  const [shuffleCooldown, setShuffleCooldown]   = useState(false);
 
-  // skip/spam throttle
   const SKIP_COOLDOWN_MS    = 500;
-  const [skipCooldown, setSkipCooldown]       = useState(false);
-
-  // shuffle/spam throttle
   const SHUFFLE_COOLDOWN_MS = 500;
-  const [shuffleCooldown, setShuffleCooldown] = useState(false);
 
-  // derive currentQueue & activeBeat
+  // Derive queue & activeBeat
   const currentQueue = useMemo(
     () => (isShuffled ? localShuffledQueue : queue),
     [isShuffled, queue, localShuffledQueue]
@@ -193,45 +161,35 @@ export default function BeatPlayer() {
     [currentBeat, currentQueue, currentIndex]
   );
 
-  // metadata
+  // Metadata
   const audioUrl   = activeBeat?.audioUrl   || '';
   const coverImage = activeBeat?.cover      || '/images/beats/default-cover.png';
   const title      = activeBeat?.name       || 'Untitled';
   const artist     = activeBeat?.artist     || 'Unknown';
-  const basePrice  = useMemo(
-    () => activeBeat?.licenses?.[0]?.price ?? 24.99,
-    [activeBeat]
-  );
+  const basePrice  = activeBeat?.licenses?.[0]?.price ?? 24.99;
 
-  // ▶️ Play / pause
-  const togglePlay = useCallback(() => {
-    const a = audioRef.current;
-    if (!a) return;
-    if (isPlaying) {
-      a.pause();
-      setIsPlaying(false);
-    } else {
-      a.play().then(() => setIsPlaying(true)).catch(() => {});
+  // 1️⃣ When URL or autoPlay flag changes, context’s playBeat handles loading & playing,
+  //     so here we simply call it.
+  useEffect(() => {
+    if (!audioUrl) return;
+    if (shouldAutoPlay) {
+      playBeat(activeBeat);
+      setShouldAutoPlay(false);
     }
-  }, [isPlaying]);
+  }, [audioUrl, shouldAutoPlay, activeBeat, playBeat, setShouldAutoPlay]);
 
-  // ⏩ Next (wraps)
+  // 2️⃣ Skip/Back
   const skipNext = useCallback(() => {
     if (skipCooldown) return;
     setSkipCooldown(true);
     setTimeout(() => setSkipCooldown(false), SKIP_COOLDOWN_MS);
 
-    const len  = currentQueue.length;
-    const next = (currentIndex + 1) % len;
+    const next = (currentIndex + 1) % currentQueue.length;
     setCurrentIndex(next);
     playBeat(currentQueue[next]);
-    setShouldAutoPlay(true);
-  }, [
-    skipCooldown, currentIndex, currentQueue,
-    playBeat, setShouldAutoPlay
-  ]);
+    setShouldAutoPlay(false);
+  }, [skipCooldown, currentIndex, currentQueue, playBeat, setShouldAutoPlay]);
 
-  // ⏪ Prev (wraps + reset if >5s)
   const skipBack = useCallback(() => {
     if (skipCooldown) return;
     setSkipCooldown(true);
@@ -240,180 +198,98 @@ export default function BeatPlayer() {
     const a = audioRef.current;
     if (a && a.currentTime > 5) {
       a.currentTime = 0;
-      setCurrentTime(0);
-      setProgress(0);
       setPlaybackTime(0);
       return;
     }
-
-    const len  = currentQueue.length;
-    const prev = (currentIndex - 1 + len) % len;
+    const prev = (currentIndex - 1 + currentQueue.length) % currentQueue.length;
     setCurrentIndex(prev);
     playBeat(currentQueue[prev]);
-    setShouldAutoPlay(true);
-  }, [
-    skipCooldown, currentIndex, currentQueue,
-    playBeat, setPlaybackTime, setShouldAutoPlay
-  ]);
+    setShouldAutoPlay(false);
+  }, [skipCooldown, currentIndex, currentQueue, playBeat, setPlaybackTime, setShouldAutoPlay, audioRef]);
 
-  // 🔀 Toggle shuffle (synchronously build & re-index)
+  // 3️⃣ Shuffle / Repeat
   const toggleShuffle = useCallback(() => {
     if (shuffleCooldown) return;
     setShuffleCooldown(true);
     setTimeout(() => setShuffleCooldown(false), SHUFFLE_COOLDOWN_MS);
 
-    setIsShuffled(prev => {
-      const next = !prev;
+    setIsShuffled((sh) => {
+      const next = !sh;
       if (next) {
         const shuffled = shuffleArray(queue);
         setLocalShuffledQueue(shuffled);
-        const idx = shuffled.findIndex(b => b.id === activeBeat.id);
-        setCurrentIndex(idx < 0 ? 0 : idx);
+        setCurrentIndex(shuffled.findIndex(b => b.id === activeBeat.id) || 0);
       } else {
         setLocalShuffledQueue([]);
-        const idx = queue.findIndex(b => b.id === activeBeat.id);
-        setCurrentIndex(idx < 0 ? 0 : idx);
+        setCurrentIndex(queue.findIndex(b => b.id === activeBeat.id) || 0);
       }
       return next;
     });
-  }, [queue, activeBeat.id, shuffleCooldown]);
+  }, [shuffleCooldown, queue, activeBeat.id]);
 
-  // 🔁 Toggle repeat
-  const toggleRepeat = useCallback(() => {
-    setIsRepeat(prev => !prev);
-  }, []);
+  const toggleRepeat = useCallback(() => setIsRepeat(r => !r), []);
 
-  // when track ends, either repeat or auto-skip
-  const handleEnded = useCallback(() => {
+  // 4️⃣ When a track ends
+  useEffect(() => {
     const a = audioRef.current;
-    if (isRepeat) {
-      if (a) {
+    if (!a) return;
+    const onEnded = () => {
+      if (isRepeat) {
         a.currentTime = 0;
         a.play().catch(() => {});
+      } else {
+        skipNext();
       }
-    } else {
-      skipNext();
-    }
-  }, [isRepeat, skipNext]);
-
-  // wire up the ended event
-  useEffect(() => {
-    const a = audioRef.current;
-    if (!a) return;
-    a.addEventListener('ended', handleEnded);
-    return () => {
-      a.removeEventListener('ended', handleEnded);
     };
-  }, [handleEnded]);
+    a.addEventListener('ended', onEnded);
+    return () => a.removeEventListener('ended', onEnded);
+  }, [audioRef, isRepeat, skipNext]);
 
-  // Seek bar
+  // 5️⃣ Play/Pause button
+  const onPlayPause = useCallback(() => {
+    if (isPlaying) pauseBeat();
+    else        toggleBeat(activeBeat);
+  }, [isPlaying, pauseBeat, toggleBeat, activeBeat]);
+
+  // 6️⃣ Seek & volume
   const handleSeek = useCallback((e) => {
-    const pct = Number(e.target.value);
-    const t   = (pct / 100) * duration;
-    const a   = audioRef.current;
+    const pct     = Number(e.target.value);
+    const newTime = (pct / 100) * duration;
+    const a       = audioRef.current;
     if (a) {
-      a.currentTime = t;
-      setCurrentTime(t);
-      setProgress(pct);
-      setPlaybackTime(t);
+      a.currentTime = newTime;
+      setPlaybackTime(newTime);
     }
-  }, [duration, setPlaybackTime]);
+  }, [duration, setPlaybackTime, audioRef]);
 
-  // Volume
   const handleVolume = useCallback((e) => {
-    const v = Number(e.target.value);
-    setVolume(v);
-    if (audioRef.current) audioRef.current.volume = v;
-  }, []);
-
-  // Spacebar → play/pause
-  // Spacebar → play/pause, but not when typing in inputs/textareas/etc.
-useEffect(() => {
-  const onKey = e => {
-    if (e.code !== 'Space') return;
-
-    const tgt = e.target;
-    const tag = tgt.tagName;             // e.g. "INPUT", "TEXTAREA", "DIV"
-    const isEditable = tgt.isContentEditable;
-
-    // if focus is in an <input>, <textarea> or any contentEditable, skip toggling
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || isEditable) {
-      return;
+    if (audioRef.current) {
+      audioRef.current.volume = Number(e.target.value);
     }
+  }, [audioRef]);
 
-    e.preventDefault();
-    togglePlay();
-  };
-
-  document.addEventListener('keydown', onKey);
-  return () => document.removeEventListener('keydown', onKey);
-}, [togglePlay]);
-
-
-  // Load new track + autoplay
+  // 7️⃣ Spacebar → play/pause
   useEffect(() => {
-    const a = audioRef.current;
-    if (!a || !audioUrl) return;
-    if (a.src !== audioUrl) {
-      a.src = audioUrl;
-      a.load();
-      a.onloadedmetadata = () => {
-        setDuration(a.duration);
-        if (playbackTime > 0 && playbackTime < a.duration) {
-          a.currentTime = playbackTime;
-        }
-        if (shouldAutoPlay) {
-          a.play()
-            .then(() => {
-              setIsPlaying(true);
-              setShouldAutoPlay(false);
-            })
-            .catch(() => {
-              setIsPlaying(false);
-              setShouldAutoPlay(false);
-            });
-        }
-      };
-    }
-  }, [audioUrl, playbackTime, shouldAutoPlay, setShouldAutoPlay]);
-
-  // 🎞️ Progress raf loop
-  useEffect(() => {
-    const a = audioRef.current;
-    if (!a) return;
-    let frame;
-    const update = () => {
-      const ct  = a.currentTime;
-      const pct = (ct / a.duration) * 100;
-      setCurrentTime(ct);
-      setProgress(pct);
-      setPlaybackTime(ct);
-      frame = requestAnimationFrame(update);
+    const onKey = (e) => {
+      if (e.code !== 'Space') return;
+      const { tagName, isContentEditable } = e.target;
+      if (tagName === 'INPUT' || tagName === 'TEXTAREA' || isContentEditable) {
+        return;
+      }
+      e.preventDefault();
+      onPlayPause();
     };
-    const start = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(update);
-    };
-    const stop = () => cancelAnimationFrame(frame);
-
-    a.addEventListener('play', start);
-    a.addEventListener('pause', stop);
-    a.addEventListener('ended', stop);
-    return () => {
-      cancelAnimationFrame(frame);
-      a.removeEventListener('play', start);
-      a.removeEventListener('pause', stop);
-      a.removeEventListener('ended', stop);
-    };
-  }, [setPlaybackTime]);
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onPlayPause]);
 
   if (!activeBeat) return null;
 
+  const progress = duration ? (playbackTime / duration) * 100 : 0;
+
   return (
     <div className="fixed bottom-0 left-0 w-full bg-gray-900 text-white z-50 shadow-xl">
-      <audio ref={audioRef} />
-
-      {/* progress bar */}
+      {/* Progress Bar */}
       <div className="px-3 py-1">
         <div className="relative w-full h-1 bg-gray-800 rounded">
           <input
@@ -430,19 +306,16 @@ useEffect(() => {
         </div>
       </div>
 
-      {/* main controls */}
+      {/* Main Controls */}
       <div className="relative flex flex-col sm:flex-row items-center sm:justify-between px-4 sm:px-6 py-2 space-y-2 sm:space-y-0">
         <CoverInfo
           coverImage={coverImage}
           title={title}
           artist={artist}
           basePrice={basePrice}
-          openLicenseModal={() => {
-            // open the license modal for the currently active beat
-            _openLicenseModal(activeBeat);
-          }}
+          openLicenseModal={() => _openLicenseModal(activeBeat)}
           isExpanded={isExpanded}
-          toggleExpand={() => setIsExpanded(exp => !exp)}
+          toggleExpand={() => setIsExpanded(e => !e)}
         />
 
         <div className="flex flex-col items-center
@@ -450,7 +323,7 @@ useEffect(() => {
                         sm:transform sm:-translate-x-1/2 sm:-translate-y-1/2">
           <Controls
             isPlaying={isPlaying}
-            onPlayPause={togglePlay}
+            onPlayPause={onPlayPause}
             onPrev={skipBack}
             onNext={skipNext}
             skipCooldown={skipCooldown}
@@ -461,26 +334,30 @@ useEffect(() => {
             onRepeat={toggleRepeat}
           />
           <div className="text-[10px] sm:text-xs text-gray-400 mt-1 text-center">
-            {`${String(Math.floor(currentTime/60)).padStart(2,'0')}:` +
-             `${String(Math.floor(currentTime%60)).padStart(2,'0')} / ` +
+            {`${String(Math.floor(playbackTime/60)).padStart(2,'0')}:` +
+             `${String(Math.floor(playbackTime%60)).padStart(2,'0')} / ` +
              `${String(Math.floor(duration/60)).padStart(2,'0')}:` +
              `${String(Math.floor(duration%60)).padStart(2,'0')}`}
           </div>
         </div>
 
-        <div className="hidden sm:flex items-center gap-2">
-          <span role="img" aria-label="Volume">🔊</span>
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.01}
-            value={volume}
-            onChange={handleVolume}
-            className="w-16 accent-purple-500"
+    
+    <div className="hidden sm:flex items-center gap-2">
+      <SpeakerWaveIcon
+        className="h-5 w-5 text-purple-500"   // adjust size & color as needed
+        aria-hidden="true"
+      />
+      <input
+        type="range"
+        min={0}
+        max={1}
+        step={0.01}
+        defaultValue={1}
+        onChange={handleVolume}
+        className="w-16 accent-purple-500"
           />
           <button
-            onClick={() => setIsExpanded(exp => !exp)}
+            onClick={() => setIsExpanded(e => !e)}
             aria-label={isExpanded ? 'Close queue' : 'Open queue'}
             className="ml-2 text-xl hover:text-pink-400"
           >
@@ -489,14 +366,15 @@ useEffect(() => {
         </div>
       </div>
 
+      {/* Queue Panel */}
       {isExpanded && (
         <BeatQueuePanel
           queue={currentQueue}
           currentIndex={currentIndex}
-          onSelect={i => {
+          onSelect={(i) => {
             setCurrentIndex(i);
             playBeat(currentQueue[i]);
-            setShouldAutoPlay(true);
+            setShouldAutoPlay(false);
           }}
         />
       )}

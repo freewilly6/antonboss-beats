@@ -6,29 +6,79 @@ const licenses = [
   {
     name: 'Basic License',
     price: '$24.99',
-    terms: `This Non-Exclusive Basic License Agreement...`,
+    shortDescription: `Ideal for demos and small personal projects. Limited streams & no radio.`,
+    terms: `This Non-Exclusive Basic License Agreement grants the purchaser the right to use the beat for:
+- Up to 2,000 streams (audio/video)
+- Up to 1 music video
+- No radio broadcast rights
+- No for-profit performance rights
+- Not eligible for digital downloads or physical copies
+- Must credit the producer in all published works
+- No ownership of the beat is transferred; producer retains full rights
+- Not allowed to register the beat with any content ID system (YouTube, Facebook, etc.)`,
   },
   {
     name: 'Premium License',
     price: '$34.99',
-    terms: `This Non-Exclusive Premium License Agreement...`,
+    shortDescription: `For independent artists releasing small-scale projects. Includes limited radio & downloads.`,
+    terms: `This Non-Exclusive Premium License Agreement grants the purchaser the right to use the beat for:
+- Up to 10,000 streams (audio/video)
+- Up to 2 music videos
+- Up to 1 radio station broadcast
+- Up to 500 digital downloads or physical copies
+- For-profit live performances permitted (non-ticketed events)
+- Must credit the producer in all published works
+- No ownership of the beat is transferred; producer retains full rights
+- Not allowed to register the beat with any content ID system`,
   },
   {
     name: 'Premium Plus License',
     price: '$49.99',
-    terms: `This Non-Exclusive Premium Plus License Agreement...`,
+    shortDescription: `Best for growing artists. High streaming limits, live performances, and radio plays included.`,
+    terms: `This Non-Exclusive Premium Plus License Agreement grants the purchaser the right to use the beat for:
+- Up to 100,000 streams (audio/video)
+- Unlimited music videos
+- Up to 5 radio station broadcasts
+- Up to 2,000 digital downloads or physical copies
+- For-profit live performances permitted (ticketed and non-ticketed events)
+- Must credit the producer in all published works
+- No ownership of the beat is transferred; producer retains full rights
+- Not allowed to register the beat with any content ID system`,
   },
   {
     name: 'Unlimited License',
     price: '$99.99',
-    terms: `This Non-Exclusive Unlimited License Agreement...`,
+    shortDescription: `Full commercial rights. No limits on streams, downloads, or performances.`,
+    terms: `This Non-Exclusive Unlimited License Agreement grants the purchaser the right to use the beat for:
+- Unlimited streams (audio/video)
+- Unlimited music videos
+- Unlimited radio broadcasts
+- Unlimited digital downloads and physical copies
+- For-profit live performances permitted (ticketed and non-ticketed events)
+- Must credit the producer in all published works
+- No ownership of the beat is transferred; producer retains full rights
+- Not allowed to register the beat with any content ID system`,
   },
   {
     name: 'Exclusive License',
     price: 'MAKE AN OFFER',
-    terms: `This Exclusive License Agreement...`,
+    shortDescription: `Exclusive rights. No resale. Includes royalties & publishing split.`,
+    terms: `This Exclusive License Agreement grants the purchaser the right to use the beat exclusively, meaning:
+- Unlimited streams (audio/video)
+- Unlimited music videos
+- Unlimited radio broadcasts
+- Unlimited digital downloads and physical copies
+- For-profit live performances permitted (ticketed and non-ticketed events)
+- Exclusive rights: the beat will no longer be sold to other customers
+- Ownership of the master recording is transferred to the buyer (unless otherwise negotiated)
+- Producer retains publishing rights and is entitled to a publishing split (standard 50/50 split unless otherwise agreed)
+- Producer is entitled to songwriting credit where applicable
+- Buyer is responsible for registering the composition with relevant performing rights organizations (PROs) and including producer in the registration
+- Buyer may register the beat with content ID systems if agreed upon
+- Credit to the producer required unless otherwise agreed in writing`,
   },
 ];
+
 
 export default function Licensing() {
   const [selectedLicense, setSelectedLicense] = useState(null);
@@ -73,14 +123,7 @@ export default function Licensing() {
               <div>
                 <h2 className="text-lg font-semibold mb-2">{license.name}</h2>
                 <p className="text-2xl font-bold mb-4">{license.price}</p>
-                <ul className="text-sm space-y-1 mb-6">
-                  <li>• Used for Music Recording</li>
-                  <li>• Distribute copies</li>
-                  <li>• Online Audio Streams</li>
-                  <li>• 1 Music Video</li>
-                  <li>• Live Performances</li>
-                  <li>• Radio Broadcasting</li>
-                </ul>
+                <p className="text-sm mb-6">{license.shortDescription}</p>
               </div>
               <button
                 onClick={() => setSelectedLicense(license)}

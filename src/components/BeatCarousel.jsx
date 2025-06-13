@@ -10,19 +10,7 @@ import 'swiper/css/effect-coverflow';
 import 'swiper/css/keyboard';
 
 export default function BeatCarousel({ beats }) {
-  const { playBeat, currentBeat } = usePlayer();
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // Simply forward the full beat (with its id) into playBeat
-  const handleSelectBeat = (beat) => {
-    const currentUrl = currentBeat?.audioUrl || currentBeat?.audiourl;
-    const beatUrl    = beat.audioUrl    || beat.audiourl;
-    if (currentUrl === beatUrl) return;
-
-    // pass the entire beat object—including its id—into the player
-    playBeat(beat);
-  };
-  // ─────────────────────────────────────────────────────────────────────────────
+  const { toggleBeat, currentBeat, isPlaying } = usePlayer();
 
   return (
     <div className="w-full max-w-5xl mx-auto mt-10">
@@ -44,39 +32,48 @@ export default function BeatCarousel({ beats }) {
         className="mySwiper"
       >
         {beats.map((beat) => {
-          const title     = beat.name       || beat.title || 'Untitled';
-          const cover     = beat.cover      || '/images/beats/default-cover.png';
-           const infoParts = [
-   beat.genre      || 'Unknown genre',
-   beat.mood       || 'No mood set',
-   beat.key        || 'Unknown key',
-   beat.bpm        || '—',
-   beat.artistType || beat.artist || '—',
- ];
-
-          const beatUrl = beat.audioUrl || beat.audiourl;
-          const isActive = currentBeat?.audioUrl === beatUrl;
+          const beatId    = beat.id ?? beat.beatId;
+          const title     = beat.name  || beat.title || 'Untitled';
+          const cover     = beat.cover || '/images/beats/default-cover.png';
+          const infoParts = [
+            beat.genre      || 'Unknown genre',
+            beat.mood       || 'No mood set',
+            beat.key        || 'Unknown key',
+            beat.bpm        || '—',
+            beat.artistType || beat.artist || '—',
+          ];
+          const isActive  = currentBeat?.id === beatId;
 
           return (
             <SwiperSlide
-              key={beat.id}
-              onClick={() => handleSelectBeat(beat)}
-              className="flex-shrink-0 cursor-pointer"
+              key={beatId}
+              className="flex-shrink-0"
               style={{ width: 300 }}
             >
               {/* DISC WRAPPER */}
               <div
-                className="disc-wrapper mx-auto"
+                className="disc-wrapper mx-auto relative cursor-pointer"
+                onClick={() => toggleBeat(beat)}
+                role="button"
+                tabIndex={0}
+                aria-label={isActive && isPlaying ? `Pause ${title}` : `Play ${title}`}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggleBeat(beat);
+                  }
+                }}
                 style={{
                   WebkitMaskImage: 'radial-gradient(circle at center, transparent 8%, black 10%)',
                   maskImage:       'radial-gradient(circle at center, transparent 8%, black 10%)',
                 }}
               >
-                {/* ROTATING LAYER */}
+                {/* ROTATING LAYER: always has the spin animation, but paused when not playing */}
                 <div
-                  className={`disc-rotator absolute inset-0 ${
-                    isActive ? 'animate-[spin_4s_linear_infinite]' : ''
-                  }`}
+                  className="disc-rotator absolute inset-0 animate-[spin_4s_linear_infinite]"
+                  style={{
+                    animationPlayState: isActive && isPlaying ? 'running' : 'paused'
+                  }}
                 >
                   {/* COVER ART */}
                   <Image
@@ -87,7 +84,7 @@ export default function BeatCarousel({ beats }) {
                     className="object-cover"
                   />
 
-                  {/* BORDER WRAPPER */}
+                  {/* CD BORDER */}
                   <div className="border-rotator absolute inset-0 pointer-events-none">
                     <Image
                       src="/images/cd-border.png"
@@ -113,11 +110,9 @@ export default function BeatCarousel({ beats }) {
 
               {/* META UNDERNEATH */}
               <div className="mt-4 w-[280px] mx-auto text-center">
-                {infoParts.length > 0 && (
-                  <p className="text-sm text-gray-500 mb-1">
-                    {infoParts.join(' | ')}
-                  </p>
-                )}
+                <p className="text-sm text-gray-500 mb-1">
+                  {infoParts.join(' | ')}
+                </p>
                 <p className="text-2xl font-semibold text-black">
                   {title}
                 </p>

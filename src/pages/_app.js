@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { CartProvider } from "@/context/CartContext";
 import { PlayerProvider, usePlayer } from "@/context/PlayerContext";
 import { BeatQueueProvider } from "@/context/BeatQueueContext";
-
+import { Analytics } from "@vercel/analytics/next"
 // 1) import your License modal context + component
 import { LicenseModalProvider } from "@/context/LicenseModalContext";
 import LicenseModal from "@/components/LicenseModal";
