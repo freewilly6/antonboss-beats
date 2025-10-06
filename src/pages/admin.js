@@ -169,7 +169,7 @@ export default function AdminPage() {
             { name:'Basic License',     price:24.99,  file_path:audioUrl },
             { name:'Premium License',  price:34.99,  file_path:wavUrl },
             { name:'Premium-Plus License',   price:49.99,  file_path:stemsUrl },
-            { name:'Unlimited License', price:99.99, file_path:stemsUrl },
+            { name:'Unlimited License', price:74.99, file_path:stemsUrl },
           ],
         }]);
       if (dbErr) throw dbErr;

@@ -87,7 +87,7 @@ export default function LicenseModal() {
     },
     {
       name: 'Unlimited License',
-      price: 99.99,
+      price: 74.99,
       terms: 'Full Package',
       mp3:   beat.audiourl || beat.audioUrl,
       wav:   beat.wav   || null,
