@@ -1,5 +1,5 @@
 // src/context/BeatQueueContext.jsx
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
 const BeatQueueContext = createContext();
@@ -13,6 +13,8 @@ export function BeatQueueProvider({ children }) {
   const [shuffledQueue, setShuffledQueue] = useState([]);
 
   useEffect(() => {
+    let cancelled = false;
+
     const fetchBeats = async () => {
       const { data, error } = await supabase
         .from('BeatFiles')
@@ -39,17 +41,31 @@ export function BeatQueueProvider({ children }) {
         bpm:      b.bpm,
         licenses: b.licenses  || [],
       }));
-console.log('🎧 normalizedBeats:', normalizedBeats)
+      if (cancelled) return;
       setQueue(normalizedBeats);
       setShuffledQueue([...normalizedBeats].sort(() => Math.random() - 0.5));
     };
-    
 
-    fetchBeats();
+    // The beats section sits a full viewport below the fold and nothing can be
+    // played before hydration finishes, so this request has no business
+    // competing with first paint. Run it once the main thread goes quiet.
+    const idle = window.requestIdleCallback
+      ? window.requestIdleCallback(fetchBeats, { timeout: 2500 })
+      : setTimeout(fetchBeats, 300);
+
+    return () => {
+      cancelled = true;
+      if (window.cancelIdleCallback && window.requestIdleCallback) window.cancelIdleCallback(idle);
+      else clearTimeout(idle);
+    };
   }, []);
 
+  // A fresh object literal here would re-render every consumer on any parent
+  // render, even though the queue itself is fetched once.
+  const value = useMemo(() => ({ queue, shuffledQueue }), [queue, shuffledQueue]);
+
   return (
-    <BeatQueueContext.Provider value={{ queue, shuffledQueue }}>
+    <BeatQueueContext.Provider value={value}>
       {children}
     </BeatQueueContext.Provider>
   );

@@ -1,5 +1,5 @@
 // context/CartContext.js
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
 
 const CartContext = createContext()
 
@@ -34,7 +34,7 @@ export const CartProvider = ({ children }) => {
   }, [cart])
 
   // ── 3) Add a beat + license combo ─────────────────────────
-  const addToCart = ({
+  const addToCart = useCallback(({
     beatId,       // ← raw PK from your BeatFiles table
     name,         // ← display name
     title,        // ← optional subtitle
@@ -76,25 +76,29 @@ export const CartProvider = ({ children }) => {
         }
       ]
     })
-  }
+  }, [])
 
   // ── 4) Remove & clear helpers ───────────────────────────────
-  const removeFromCart = id =>
-    setCart(prev => prev.filter(item => item.id !== id))
+  const removeFromCart = useCallback(id =>
+    setCart(prev => prev.filter(item => item.id !== id)), [])
 
-  const clearCart = () => {
+  const clearCart = useCallback(() => {
     setCart([])
     localStorage.removeItem('antonboss-cart')
-  }
+  }, [])
 
   // ── 5) Total calculator ────────────────────────────────────
-  const getTotal = () =>
-    cart.reduce((sum, item) => sum + (Number(item.price) || 0), 0)
+  const getTotal = useCallback(() =>
+    cart.reduce((sum, item) => sum + (Number(item.price) || 0), 0), [cart])
+
+  // Stable identities, so consumers only re-render when the cart truly changes.
+  const value = useMemo(
+    () => ({ cart, addToCart, removeFromCart, clearCart, getTotal }),
+    [cart, addToCart, removeFromCart, clearCart, getTotal]
+  )
 
   return (
-    <CartContext.Provider
-      value={{ cart, addToCart, removeFromCart, clearCart, getTotal }}
-    >
+    <CartContext.Provider value={value}>
       {children}
     </CartContext.Provider>
   )

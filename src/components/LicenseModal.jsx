@@ -1,12 +1,10 @@
 // src/components/LicenseModal.jsx
 import { useState, useEffect } from 'react'
-import { useRouter }            from 'next/router'
 import { supabase }             from '../lib/supabaseClient'
 import { useCart }              from '@/context/CartContext'
 import { useLicenseModal }      from '@/context/LicenseModalContext'
 
 export default function LicenseModal() {
-  const router    = useRouter()
   const { isOpen, beat, closeLicenseModal } = useLicenseModal()
   const { addToCart, cart } = useCart()
   const [purchasedIds, setPurchasedIds] = useState([])
@@ -109,10 +107,11 @@ export default function LicenseModal() {
     // already own it?
     if (purchasedIds.includes(combo)) return
 
-    // exclusive → contact
+    // Exclusive is negotiated, not carted. The contact page is gone, so open mail.
     if (lic.name === 'Exclusive License') {
       closeLicenseModal()
-      router.push('/contact')
+      const subject = encodeURIComponent(`Exclusive license — ${title}`)
+      window.location.href = `mailto:antonbosspd@gmail.com?subject=${subject}`
       return
     }
 
@@ -133,23 +132,30 @@ export default function LicenseModal() {
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-70 z-[9999] flex items-center justify-center p-4">
-      <div className="relative bg-gray-900 text-white rounded-lg w-full max-w-2xl overflow-hidden">
+    <div
+      className="fixed inset-0 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+      style={{ zIndex: 'var(--z-dialog)' }}
+    >
+      <div className="relative w-full max-w-2xl border border-[var(--fg-20)] bg-black text-white">
 
         {/* Close */}
         <button
           onClick={closeLicenseModal}
-          className="absolute top-4 right-4 text-2xl hover:text-pink-400"
-        >✕</button>
+          aria-label="Close"
+          className="ab-btn ab-btn-bare absolute right-4 top-4 text-lg"
+        >×</button>
 
         {/* Header */}
-        <div className="flex items-center gap-3 bg-gray-800 p-4">
-          <img src={coverUrl} alt={title} className="w-16 h-16 rounded object-cover" />
-          <h2 className="text-2xl font-bold">{title} — Choose License</h2>
+        <div className="flex items-center gap-4 border-b border-[var(--fg-10)] p-6">
+          <img src={coverUrl} alt="" className="h-14 w-14 object-cover grayscale" />
+          <div className="min-w-0">
+            <h2 className="ab-label mb-1">Choose license</h2>
+            <p className="truncate text-lg">{title}</p>
+          </div>
         </div>
 
         {/* Options */}
-        <div className="p-4 space-y-3">
+        <div className="max-h-[60vh] space-y-3 overflow-y-auto p-6">
           {licenses.map(lic => {
             const combo = `${realId}-${lic.name}`
             const bought = purchasedIds.includes(combo)
@@ -158,31 +164,31 @@ export default function LicenseModal() {
             let label, btnClass
             if (bought) {
               label    = 'Purchased'
-              btnClass = 'bg-gray-600 text-gray-300 cursor-not-allowed'
+              btnClass = 'ab-btn'
             } else if (inCart) {
               label    = 'Added'
-              btnClass = 'bg-gray-600 text-gray-300 cursor-not-allowed'
+              btnClass = 'ab-btn ab-btn-active'
             } else if (lic.name === 'Exclusive License') {
-              label    = 'Contact'
-              btnClass = 'border-2 border-pink-300 text-pink-300 hover:bg-pink-500 hover:text-white'
+              label    = 'Enquire'
+              btnClass = 'ab-btn'
             } else {
               label    = `+ $${lic.price.toFixed(2)}`
-              btnClass = 'bg-pink-300 text-black hover:bg-pink-500'
+              btnClass = 'ab-btn ab-btn-solid'
             }
 
             return (
               <div
                 key={lic.name}
-                className="flex justify-between items-center bg-gray-800 rounded p-4"
+                className="ab-card flex items-center justify-between gap-4 p-4"
               >
-                <div>
-                  <h4 className="font-semibold">{lic.name}</h4>
-                  <p className="text-sm text-gray-400">{lic.terms}</p>
+                <div className="min-w-0">
+                  <h4 className="text-sm">{lic.name}</h4>
+                  <p className="ab-meta mt-1">{lic.terms}</p>
                 </div>
                 <button
                   disabled={bought || inCart}
                   onClick={() => handleClick(lic)}
-                  className={`${btnClass} px-4 py-2 rounded font-semibold transition`}
+                  className={btnClass}
                 >
                   {label}
                 </button>

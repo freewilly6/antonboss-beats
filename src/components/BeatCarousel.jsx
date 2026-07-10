@@ -109,11 +109,11 @@ export default function BeatCarousel({ beats }) {
               </div>
 
               {/* META UNDERNEATH */}
-              <div className="mt-4 w-[280px] mx-auto text-center">
-                <p className="text-sm text-gray-500 mb-1">
-                  {infoParts.join(' | ')}
+              <div className="mx-auto mt-6 w-[280px] text-center">
+                <p className="ab-meta mb-2 truncate">
+                  {infoParts.join(' · ')}
                 </p>
-                <p className="text-2xl font-semibold text-black">
+                <p className="truncate text-lg text-white">
                   {title}
                 </p>
               </div>

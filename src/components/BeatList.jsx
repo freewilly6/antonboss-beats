@@ -61,15 +61,13 @@ export default function BeatList({ beats }) {
     return matchesText && matchesMood && matchesKey && matchesArtist;
   });
 
-  const filterBtnBase = `
-    px-4 py-2
-    bg-gradient-to-r from-pink-500 to-purple-500
-    hover:from-pink-600 hover:to-purple-600
-    text-white font-semibold
-    rounded-lg shadow-lg
-    transform hover:-translate-y-0.5
-    transition ease-out duration-200
-  `;
+  const filterBtnBase = 'ab-btn';
+  const optionsBase =
+    'absolute z-10 mt-1 border border-[var(--fg-20)] bg-black';
+  const optionClass = ({ active }) =>
+    `flex items-center gap-2 px-4 py-2 cursor-pointer text-xs ${
+      active ? 'bg-white/10' : ''
+    }`;
 
   return (
     <div className="space-y-10">
@@ -79,7 +77,7 @@ export default function BeatList({ beats }) {
         placeholder="Search beats, mood, key, artist (comma-separated)…"
         value={searchTerm}
         onChange={e => setSearchTerm(e.target.value)}
-        className="w-full p-3 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500"
+        className="ab-field"
       />
 
       {/* Filters */}
@@ -90,22 +88,16 @@ export default function BeatList({ beats }) {
           onChange={val => setSelectedMood(prev => (prev === val ? '' : val))}
         >
           <div className="relative">
-            <Listbox.Button className={filterBtnBase}>
+            <Listbox.Button className={`${filterBtnBase} ${selectedMood ? 'ab-btn-active' : ''}`}>
               {selectedMood || 'Filter Mood'}
             </Listbox.Button>
-            <Listbox.Options className="absolute mt-1 w-40 bg-white border rounded-lg shadow-lg z-10">
+            <Listbox.Options className={`${optionsBase} w-40`}>
               {['Dark','Chill','Aggressive','Euphoric','Dance'].map(m => (
-                <Listbox.Option key={m} value={m}
-                  className={({ active }) =>
-                    `flex items-center px-4 py-2 cursor-pointer ${
-                      active ? 'bg-gray-100' : ''
-                    }`
-                  }
-                >
+                <Listbox.Option key={m} value={m} className={optionClass}>
                   {({ selected }) => (
                     <>
-                      {selected && <CheckIcon className="w-5 h-5 text-pink-500 mr-2" />}
-                      <span className={selected ? 'font-semibold' : ''}>{m}</span>
+                      {selected && <CheckIcon className="w-4 h-4 text-[var(--accent)]" />}
+                      <span className={selected ? 'text-white' : 'text-[var(--fg-50)]'}>{m}</span>
                     </>
                   )}
                 </Listbox.Option>
@@ -120,22 +112,16 @@ export default function BeatList({ beats }) {
           onChange={val => setSelectedArtist(prev => (prev === val ? '' : val))}
         >
           <div className="relative">
-            <Listbox.Button className={filterBtnBase}>
+            <Listbox.Button className={`${filterBtnBase} ${selectedArtist ? 'ab-btn-active' : ''}`}>
               {selectedArtist || 'Filter Artist'}
             </Listbox.Button>
-            <Listbox.Options className="absolute mt-1 w-48 max-h-64 overflow-auto bg-white border rounded-lg shadow-lg z-10">
+            <Listbox.Options className={`${optionsBase} max-h-64 w-48 overflow-auto`}>
               {artists.map(a => (
-                <Listbox.Option key={a} value={a}
-                  className={({ active }) =>
-                    `flex items-center px-4 py-2 cursor-pointer ${
-                      active ? 'bg-gray-100' : ''
-                    }`
-                  }
-                >
+                <Listbox.Option key={a} value={a} className={optionClass}>
                   {({ selected }) => (
                     <>
-                      {selected && <CheckIcon className="w-5 h-5 text-pink-500 mr-2" />}
-                      <span className={selected ? 'font-semibold' : ''}>{a}</span>
+                      {selected && <CheckIcon className="w-4 h-4 text-[var(--accent)]" />}
+                      <span className={selected ? 'text-white' : 'text-[var(--fg-50)]'}>{a}</span>
                     </>
                   )}
                 </Listbox.Option>
@@ -152,10 +138,7 @@ export default function BeatList({ beats }) {
               setSelectedKey('');
               setSelectedArtist('');
             }}
-            className="
-              px-4 py-2 bg-red-400 text-white font-semibold
-              rounded-lg shadow hover:bg-red-500 transition
-            "
+            className="ab-btn"
           >
             Clear Filters
           </button>
@@ -168,26 +151,26 @@ export default function BeatList({ beats }) {
       {/* Results */}
       {(searchTerm || selectedMood || selectedKey || selectedArtist) && (
         <div className="space-y-6">
-          <h2 className="text-2xl font-bold mt-6">Search Results:</h2>
+          <h2 className="ab-label mt-6">Search Results</h2>
           {filteredBeats.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               {filteredBeats.map(beat => (
                 <div
                   key={beat.id}
-                  className="p-4 rounded-lg border hover:shadow-md transition flex items-center gap-4 cursor-pointer"
+                  className="ab-card flex cursor-pointer items-center gap-4 p-4"
                   onClick={() => playBeat(beat)}  // sends full beat, including id
                 >
                   <img
                     src={beat.cover}
                     alt={beat.name}
-                    className="w-16 h-16 rounded object-cover"
+                    className="h-16 w-16 object-cover grayscale"
                   />
-                  <div className="flex flex-col flex-grow">
-                    <h3 className="text-lg font-bold">{beat.name}</h3>
-                    <p className="text-gray-500 text-sm">
-                      {beat.genre || 'N/A'} | {beat.mood || 'N/A'} |{' '}
-                      {beat.key || 'N/A'} | {beat.bpm || 'N/A'} |{' '}
-                      {beat.artist}
+                  <div className="flex min-w-0 flex-grow flex-col gap-1">
+                    <h3 className="truncate text-sm">{beat.name}</h3>
+                    <p className="ab-meta truncate">
+                      {[beat.genre, beat.mood, beat.key, beat.bpm, beat.artist]
+                        .filter(Boolean)
+                        .join(' · ')}
                     </p>
                   </div>
                   <button
@@ -195,14 +178,7 @@ export default function BeatList({ beats }) {
                       e.stopPropagation();
                       openLicenseModal(beat);   // also gets full beat with id
                     }}
-                    className="
-                      bg-gradient-to-r from-pink-500 to-purple-500
-                      hover:from-pink-600 hover:to-purple-600
-                      text-white font-bold uppercase tracking-wide
-                      py-2 px-4 rounded-lg shadow-lg
-                      transform hover:-translate-y-0.5
-                      transition ease-out duration-200
-                    "
+                    className="ab-btn ab-btn-sm"
                   >
                     From ${basePrice.toFixed(2)}
                   </button>
@@ -210,7 +186,7 @@ export default function BeatList({ beats }) {
               ))}
             </div>
           ) : (
-            <p className="text-center text-gray-500">No beats found!</p>
+            <p className="ab-label-dim text-center">No beats found</p>
           )}
         </div>
       )}

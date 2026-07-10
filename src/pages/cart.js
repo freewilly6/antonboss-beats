@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 
 
 import dynamic from 'next/dynamic'
+import { PayPalScriptProvider } from '@paypal/react-paypal-js';
 import { useCart } from '../context/CartContext';
 import Layout from '../components/Layout';
 
@@ -14,7 +15,7 @@ const supabase = createClient(
 
 const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
 
-export default function CartPage() {
+function CartPageInner() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
   const [accessToken, setAccessToken] = useState(null);
@@ -228,5 +229,21 @@ const response = await fetch('/api/complete-purchase', {
         </div>
       )}
     </Layout>
+  );
+}
+
+// The PayPal SDK script is fetched from paypal.com the moment this provider
+// mounts. It used to wrap the whole app in _app.js, so every page — the
+// homepage most expensively — paid for a checkout it would never run.
+export default function CartPage() {
+  return (
+    <PayPalScriptProvider
+      options={{
+        'client-id': process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID,
+        currency: 'USD',
+      }}
+    >
+      <CartPageInner />
+    </PayPalScriptProvider>
   );
 }

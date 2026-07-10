@@ -1,6 +1,6 @@
 // src/components/BeatPlayer.jsx
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { usePlayer }    from '@/context/PlayerContext';
+import { usePlayer, usePlaybackTime } from '@/context/PlayerContext';
 import { useBeatQueue } from '@/context/BeatQueueContext';
 import BeatQueuePanel   from './BeatQueuePanel';
 import { useLicenseModal } from '@/context/LicenseModalContext';
@@ -36,7 +36,7 @@ const CoverInfo = React.memo(function CoverInfo({
           <h4 className="font-semibold truncate text-sm sm:text-base">
             {title}
           </h4>
-          <p className="text-[10px] sm:text-xs text-gray-400 truncate">
+          <p className="ab-meta truncate">
             {artist}
           </p>
         </div>
@@ -44,13 +44,13 @@ const CoverInfo = React.memo(function CoverInfo({
       <div className="flex items-center gap-2">
         <button
           onClick={openLicenseModal}
-          className="bg-pink-500 hover:bg-pink-600 text-white text-xs font-semibold py-1 px-2 rounded whitespace-nowrap"
+          className="ab-btn ab-btn-solid ab-btn-sm"
         >
           From ${basePrice}
         </button>
         <button
           onClick={toggleExpand}
-          className="sm:hidden ml-1 text-lg hover:text-pink-400"
+          className="ab-btn ab-btn-bare ml-1 text-lg sm:hidden"
           aria-label={isExpanded ? 'Close queue' : 'Open queue'}
         >
           {isExpanded ? '×' : '☰'}
@@ -76,7 +76,7 @@ const Controls = React.memo(function Controls({
       >
         <ArrowsRightLeftIcon
           className={`h-4 w-4 sm:h-5 sm:w-5 transition-colors ${
-            isShuffled ? 'text-pink-400' : 'text-gray-400 hover:text-pink-400'
+            isShuffled ? 'text-[var(--accent)]' : 'text-[var(--fg-35)] hover:text-[var(--accent)]'
           }`}
         />
       </button>
@@ -87,13 +87,13 @@ const Controls = React.memo(function Controls({
         disabled={skipCooldown}
         className="disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        <ArrowLeftIcon className="h-5 w-5 sm:h-6 sm:w-6 hover:text-pink-400" />
+        <ArrowLeftIcon className="h-5 w-5 sm:h-6 sm:w-6 hover:text-[var(--accent)]" />
       </button>
 
       <button onClick={onPlayPause} aria-label={isPlaying ? 'Pause' : 'Play'}>
         {isPlaying
-          ? <PauseIcon className="h-6 w-6 sm:h-8 sm:w-8 hover:text-pink-400" />
-          : <PlayIcon  className="h-6 w-6 sm:h-8 sm:w-8 hover:text-pink-400" />}
+          ? <PauseIcon className="h-6 w-6 sm:h-8 sm:w-8 hover:text-[var(--accent)]" />
+          : <PlayIcon  className="h-6 w-6 sm:h-8 sm:w-8 hover:text-[var(--accent)]" />}
       </button>
 
       <button
@@ -102,7 +102,7 @@ const Controls = React.memo(function Controls({
         disabled={skipCooldown}
         className="disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        <ArrowRightIcon className="h-5 w-5 sm:h-6 sm:w-6 hover:text-pink-400" />
+        <ArrowRightIcon className="h-5 w-5 sm:h-6 sm:w-6 hover:text-[var(--accent)]" />
       </button>
 
       <button
@@ -112,7 +112,7 @@ const Controls = React.memo(function Controls({
       >
         <ArrowPathIcon
           className={`h-5 w-5 sm:h-6 sm:w-6 transition-colors ${
-            isRepeat ? 'text-pink-400' : 'text-gray-400 hover:text-pink-400'
+            isRepeat ? 'text-[var(--accent)]' : 'text-[var(--fg-35)] hover:text-[var(--accent)]'
           }`}
         />
       </button>
@@ -121,20 +121,20 @@ const Controls = React.memo(function Controls({
 });
 
 export default function BeatPlayer() {
-  // pull everything from PlayerContext
   const {
     currentBeat,
     isPlaying,
-    playbackTime,
-    duration,
     audioRef,
     shouldAutoPlay,
     setShouldAutoPlay,
-    setPlaybackTime,
     playBeat,
     pauseBeat,
     toggleBeat,
   } = usePlayer();
+
+  // Separate context: this is the ~4x/second one, and the playbar is its only
+  // subscriber. See PlayerContext.jsx.
+  const { playbackTime, duration, setPlaybackTime } = usePlaybackTime();
 
   const { queue } = useBeatQueue();
   const { openLicenseModal: _openLicenseModal } = useLicenseModal();
@@ -181,6 +181,9 @@ export default function BeatPlayer() {
   // 2️⃣ Skip/Back
   const skipNext = useCallback(() => {
     if (skipCooldown) return;
+    // An empty queue makes the modulo below NaN, which indexes to undefined.
+    // Reachable when a demo/uploaded track ends before the queue has loaded.
+    if (!currentQueue.length) return;
     setSkipCooldown(true);
     setTimeout(() => setSkipCooldown(false), SKIP_COOLDOWN_MS);
 
@@ -201,6 +204,7 @@ export default function BeatPlayer() {
       setPlaybackTime(0);
       return;
     }
+    if (!currentQueue.length) return;
     const prev = (currentIndex - 1 + currentQueue.length) % currentQueue.length;
     setCurrentIndex(prev);
     playBeat(currentQueue[prev]);
@@ -288,19 +292,25 @@ export default function BeatPlayer() {
   const progress = duration ? (playbackTime / duration) * 100 : 0;
 
   return (
-    <div className="fixed bottom-0 left-0 w-full bg-gray-900 text-white z-50 shadow-xl">
+    // Above the VHS overlay: behind grain, scanlines and a vignette the transport
+    // controls and timecode are illegible. Solid black, hard top rule.
+    <div
+      className="fixed bottom-0 left-0 w-full border-t border-[var(--fg-35)] bg-black text-white"
+      style={{ zIndex: 'var(--z-chrome)' }}
+    >
       {/* Progress Bar */}
       <div className="px-3 py-1">
-        <div className="relative w-full h-1 bg-gray-800 rounded">
+        <div className="relative h-1 w-full">
           <input
             type="range"
             min={0}
             max={100}
             value={progress}
             onChange={handleSeek}
-            className="absolute inset-0 w-full h-full appearance-none cursor-pointer"
+            aria-label="Seek"
+            className="absolute inset-0 h-full w-full cursor-pointer appearance-none"
             style={{
-              background: `linear-gradient(to right, #ec4899 ${progress}%, #374151 ${progress}%)`
+              background: `linear-gradient(to right, var(--accent) ${progress}%, var(--fg-20) ${progress}%)`
             }}
           />
         </div>
@@ -333,7 +343,7 @@ export default function BeatPlayer() {
             isRepeat={isRepeat}
             onRepeat={toggleRepeat}
           />
-          <div className="text-[10px] sm:text-xs text-gray-400 mt-1 text-center">
+          <div className="ab-meta mt-1 text-center">
             {`${String(Math.floor(playbackTime/60)).padStart(2,'0')}:` +
              `${String(Math.floor(playbackTime%60)).padStart(2,'0')} / ` +
              `${String(Math.floor(duration/60)).padStart(2,'0')}:` +
@@ -344,7 +354,7 @@ export default function BeatPlayer() {
     
     <div className="hidden sm:flex items-center gap-2">
       <SpeakerWaveIcon
-        className="h-5 w-5 text-purple-500"   // adjust size & color as needed
+        className="h-5 w-5 text-[var(--fg-35)]"
         aria-hidden="true"
       />
       <input
@@ -354,12 +364,13 @@ export default function BeatPlayer() {
         step={0.01}
         defaultValue={1}
         onChange={handleVolume}
-        className="w-16 accent-purple-500"
+        aria-label="Volume"
+        className="w-16"
           />
           <button
             onClick={() => setIsExpanded(e => !e)}
             aria-label={isExpanded ? 'Close queue' : 'Open queue'}
-            className="ml-2 text-xl hover:text-pink-400"
+            className="ab-btn ab-btn-bare ml-2 text-lg"
           >
             {isExpanded ? '×' : '☰'}
           </button>

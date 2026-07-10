@@ -1,126 +1,575 @@
 @import "tailwindcss";
-@import url('https://fonts.googleapis.com/css2?family=UnifrakturMaguntia&display=swap');
 
+/* ===============================================================
+   Tokens — the page is black, always. Nothing inverts.
+   =============================================================== */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #000000;
+  --fg: #ffffff;
+  --accent: #ff2d95;
+
+  /* One ramp of foreground opacities. Every muted tone in the UI comes from
+     here, so nothing drifts into an off-grey of its own. */
+  --fg-70: rgba(255, 255, 255, 0.70);
+  --fg-50: rgba(255, 255, 255, 0.50);
+  --fg-35: rgba(255, 255, 255, 0.35);
+  --fg-20: rgba(255, 255, 255, 0.20);
+  --fg-10: rgba(255, 255, 255, 0.10);
+
+  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
+
+  --background: var(--bg);
+  --foreground: var(--fg);
+
+  /* One z-scale. The tape grain falls on the page content, but the controls the
+     visitor actually operates sit above it — a playbar behind scanlines, grain
+     and a vignette is unreadable. Dialogs sit above the controls. */
+  --z-overlay: 9000;
+  --z-chrome: 9100;   /* playbar, pill nav, control panel */
+  --z-dialog: 9200;   /* cart drawer, license modal */
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-background: var(--bg);
+  --color-foreground: var(--fg);
+  --color-accent: var(--accent);
+  --font-mono: var(--font-mono);
+}
+
+html {
+  scrollbar-gutter: stable;
+  background: var(--bg);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  /* Monospace everywhere. It is the whole typographic identity — the scope
+     draws in it, the nav is set in it, the store reads in it. */
+  font-family: var(--font-mono);
+  overflow-y: scroll;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* ==== Custom Font Class ==== */
-.unifrakturmaguntia-regular {
-  font-family: "UnifrakturMaguntia", cursive;
+::selection {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* ===============================================================
+   Type scale — three sizes and one voice.
+   Display is the only thing that isn't uppercase-tracked.
+   =============================================================== */
+
+.ab-display {
+  font-size: clamp(1.75rem, 4vw, 2.75rem);
+  line-height: 1.1;
   font-weight: 400;
-  font-style: normal;
+  letter-spacing: -0.02em;
 }
 
-/* Gradient animation */
-@keyframes gradientBlur {
-  0%, 100% {
-    background-position: 0% 50%;
+/* Section headings and any tiny structural label share one treatment. */
+.ab-label {
+  font-size: 0.625rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--fg-50);
+}
+
+.ab-label-dim {
+  font-size: 0.625rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--fg-35);
+}
+
+.ab-body {
+  font-size: 0.8125rem;
+  line-height: 1.7;
+  color: var(--fg-50);
+}
+
+.ab-meta {
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  color: var(--fg-35);
+}
+
+/* ===============================================================
+   Buttons — one shape. Square, hairline, tracked caps.
+   Ghost is the default; solid is reserved for the single commit action
+   on a screen (checkout, send, buy).
+   =============================================================== */
+
+.ab-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.125rem;
+  border: 1px solid var(--fg-20);
+  background: transparent;
+  color: var(--fg-70);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background-color 0.15s;
+}
+
+.ab-btn:hover {
+  color: var(--fg);
+  border-color: var(--fg-50);
+}
+
+.ab-btn:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ab-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Currently-on state: playing, selected, active section. */
+.ab-btn-active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.ab-btn-solid {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.ab-btn-solid:hover {
+  background: #ff4da5;
+  border-color: #ff4da5;
+  color: #fff;
+}
+
+/* Borderless, for icon controls and quiet dismissals. */
+.ab-btn-bare {
+  border-color: transparent;
+  padding: 0.375rem 0.5rem;
+}
+
+.ab-btn-bare:hover {
+  border-color: transparent;
+  color: var(--fg);
+}
+
+.ab-btn-sm {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.5625rem;
+}
+
+/* ===============================================================
+   Pill nav — the one white object on the page. It has to read at a glance
+   through the tape grain, so it is solid rather than translucent.
+   =============================================================== */
+
+.pill-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+  padding: 0.3rem;
+  border-radius: 9999px;
+  background: #fff;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.06),
+    0 8px 30px rgba(0, 0, 0, 0.55);
+}
+
+.pill-nav-item {
+  border: 0;
+  border-radius: 9999px;
+  padding: 0.5rem 1rem;
+  background: transparent;
+  color: rgba(0, 0, 0, 0.55);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.pill-nav-item:hover { color: #000; background: rgba(0, 0, 0, 0.06); }
+.pill-nav-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.pill-nav-item.is-active {
+  background: #000;
+  color: #fff;
+}
+
+.pill-nav-item.has-items { color: var(--accent); }
+.pill-nav-item.has-items:hover { color: var(--accent); }
+
+.pill-nav-divider {
+  width: 1px;
+  height: 1rem;
+  margin: 0 0.25rem;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+/* ===============================================================
+   Inputs — a single rule underneath, nothing else.
+   =============================================================== */
+
+.ab-input {
+  width: 100%;
+  padding: 0.625rem 0;
+  border: 0;
+  border-bottom: 1px solid var(--fg-20);
+  background: transparent;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+}
+
+.ab-input::placeholder { color: var(--fg-20); }
+.ab-input:focus { outline: none; border-bottom-color: var(--accent); }
+
+/* Boxed variant for search fields and the panel's line editor. */
+.ab-field {
+  width: 100%;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid var(--fg-20);
+  background: transparent;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+}
+
+.ab-field::placeholder { color: var(--fg-20); }
+.ab-field:focus { outline: none; border-color: var(--fg-50); }
+
+.ab-card {
+  border: 1px solid var(--fg-10);
+  background: transparent;
+  transition: border-color 0.15s;
+}
+
+.ab-card:hover { border-color: var(--fg-35); }
+
+.ab-divider { border-color: var(--fg-10); }
+
+/* ===============================================================
+   Offscreen sections
+   =============================================================== */
+
+/* Skip layout, style and paint for sections that are nowhere near the viewport.
+   The Freedom field alone is 34 independently-animating words; without this the
+   browser composites them the entire time you are reading the hero.
+   contain-intrinsic-size must match each section's real height, or the scrollbar
+   jumps and anchor scrolling lands short. #scope is excluded — it holds the
+   canvas and is on screen from the first frame. */
+/* Only the two sections that animate continuously off screen. Applying it to
+   #beats and #about bought nothing measurable — their content is static — while
+   the estimate-vs-actual height correction pushed everything below them down,
+   costing layout shift for free. */
+#freedom {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 100vh; /* min-h-screen */
+}
+
+#horse {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 70vh;  /* min-h-[70vh] */
+}
+
+/* ===============================================================
+   Scroll reveal — see components/Reveal.jsx
+   =============================================================== */
+
+.ab-reveal {
+  opacity: 0;
+  transform: translateY(1.5rem);
+  transition: opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+  /* Hint the compositor, but only while the transition is pending. */
+  will-change: opacity, transform;
+}
+
+.ab-reveal-in {
+  opacity: 1;
+  transform: none;
+  will-change: auto;
+}
+
+/* Motion is the whole effect, so drop it wholesale rather than shortening it.
+   Reveal.jsx also short-circuits its observer, but this covers a stale class. */
+@media (prefers-reduced-motion: reduce) {
+  .ab-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
   }
-  50% {
-    background-position: 100% 50%;
+}
+
+/* ===============================================================
+   Global VHS overlay — components/VhsOverlay.jsx
+   Everything here is decorative and must never eat a click.
+   =============================================================== */
+
+.vhs-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-overlay);
+  pointer-events: none;
+  overflow: hidden;
+  /* The layers inside animate constantly; keep their repaints off the page. */
+  contain: strict;
+}
+.vhs-overlay > * {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Grain. The tile is 4x the viewport and jitters by whole tiles, so the noise
+   re-rolls each step instead of visibly sliding. */
+/* No mix-blend-mode anywhere in this overlay. `screen` forces the browser to
+   read back everything painted beneath these full-viewport layers and re-blend
+   it every single frame — which, since they animate continuously, means the
+   whole page re-composites while you scroll. Over a black background plain alpha
+   is visually all but identical and stays on the compositor. */
+.vhs-grain {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.10;
+  animation: vhs-grain-jitter 0.6s steps(6) infinite;
+  will-change: transform;
+}
+
+@keyframes vhs-grain-jitter {
+  0%   { transform: translate(0, 0); }
+  16%  { transform: translate(-3%, 2%); }
+  33%  { transform: translate(2%, -3%); }
+  50%  { transform: translate(-2%, -2%); }
+  66%  { transform: translate(3%, 1%); }
+  83%  { transform: translate(-1%, 3%); }
+  100% { transform: translate(0, 0); }
+}
+
+/* The colour that survives on a worn tape is the chroma channel bleeding.
+   This is the only blue on the page, and it lives in the noise, as it should. */
+/* Chroma bleed, spread across the whole field rather than banded at the edges.
+   The old left/right gradients terminated at 12% and read as two hard bars that
+   twitched with the drift animation. */
+.vhs-chroma {
+  background:
+    radial-gradient(ellipse at 20% 40%, rgba(255, 0, 80, 0.035), transparent 55%),
+    radial-gradient(ellipse at 80% 60%, rgba(0, 180, 255, 0.04), transparent 55%),
+    radial-gradient(ellipse at 50% 50%, rgba(40, 80, 255, 0.03), transparent 75%);
+  animation: vhs-chroma-drift 7s ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes vhs-chroma-drift {
+  0%, 100% { transform: translateX(0);   opacity: 0.85; }
+  50%      { transform: translateX(3px); opacity: 1; }
+}
+
+.vhs-scanlines {
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0px,
+    rgba(0, 0, 0, 0) 2px,
+    rgba(0, 0, 0, 0.22) 3px,
+    rgba(0, 0, 0, 0.22) 4px
+  );
+  /* Creep downward the way a mistracked head does. */
+  animation: vhs-scan-roll 9s linear infinite;
+}
+
+@keyframes vhs-scan-roll {
+  from { background-position-y: 0; }
+  to   { background-position-y: 4px; }
+}
+
+/* A bright head-switching band sweeping up the screen every few seconds. */
+.vhs-tracking {
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(255, 255, 255, 0.035) 40%,
+    rgba(255, 255, 255, 0.07) 50%,
+    rgba(255, 255, 255, 0.035) 60%,
+    transparent 100%
+  );
+  height: 18vh;
+  inset: auto 0 0 0;
+  animation: vhs-tracking-sweep 11s linear infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes vhs-tracking-sweep {
+  0%       { transform: translateY(20vh); opacity: 0; }
+  6%       { opacity: 1; }
+  92%      { opacity: 1; }
+  100%     { transform: translateY(-120vh); opacity: 0; }
+}
+
+.vhs-vignette {
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.75) 100%);
+}
+
+/* The whole effect is motion and texture. Strip the motion, keep a whisper of
+   the texture, so the page still reads as tape without moving. */
+@media (prefers-reduced-motion: reduce) {
+  .vhs-grain,
+  .vhs-chroma,
+  .vhs-scanlines,
+  .vhs-tracking {
+    animation: none;
   }
+  .vhs-tracking { display: none; }
+  .vhs-grain { opacity: 0.07; }
 }
 
-.animate-gradientBlur {
-  background-size: 400% 400%;
-  animation: gradientBlur 15s ease infinite;
+/* ===============================================================
+   Glowing, faded type
+   =============================================================== */
+
+/* The soft bloom the reference has on every letter. Applied to display type and
+   the scattered Freedom field; body copy stays crisp so it remains readable. */
+/* Three layers, widest blur 26px. Each shadow layer costs a full re-raster of
+   the glyphs, and this class lands on 34 independently-animating words in the
+   Freedom field — a 48px blur there stalls software rasterizers outright. */
+.ab-glow {
+  text-shadow:
+    0 0 1px rgba(255, 255, 255, 0.9),
+    0 0 8px rgba(255, 255, 255, 0.45),
+    0 0 26px rgba(150, 180, 255, 0.22);
 }
 
-/* Drum Pad Bounce Animation */
-@keyframes bounce-small {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.15); }
-  100% { transform: scale(1); }
+.ab-display {
+  text-shadow:
+    0 0 1px rgba(255, 255, 255, 0.7),
+    0 0 14px rgba(255, 255, 255, 0.28),
+    0 0 40px rgba(120, 160, 255, 0.15);
 }
 
-.animate-bounce-small {
-  animation: bounce-small 0.2s ease-in-out;
+/* Drift for the scattered Freedom field. Each word supplies its own --dx/--dy/
+   --rot and its own duration, so nothing moves in lockstep. */
+@keyframes freedom-drift {
+  from { transform: translate(0, 0) rotate(0deg); }
+  to   { transform: translate(var(--dx), var(--dy)) rotate(var(--rot)); }
 }
 
-/* Astroworld-inspired global styles */
+/* Each word breathes all the way out and back. --peak is its brightest point,
+   set per word; the fade runs on a separate clock from the drift so the field
+   never pulses in unison. */
+@keyframes freedom-fade {
+  0%, 100% { opacity: 0; }
+  18%      { opacity: calc(var(--peak) * 0.4); }
+  50%      { opacity: var(--peak); }
+  82%      { opacity: calc(var(--peak) * 0.4); }
+}
 
-/* Noise texture for distortion effects */
+/* Animations off, so the inline `opacity: peak` applies and every word stays
+   legible instead of freezing at whatever keyframe it was mid-way through. */
+@media (prefers-reduced-motion: reduce) {
+  #freedom span { animation: none !important; }
+}
+
+/* ===============================================================
+   ASCII horse — components/AsciiHorse.jsx
+   =============================================================== */
+
+.ascii-horse-stage {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  /* Nothing here should ever widen the document. */
+  contain: paint;
+}
+
+/* The runner. Only this element moves, and it moves on transform alone. */
+.ascii-horse-runner {
+  display: inline-block;
+  animation: horse-run 15s linear infinite;
+  will-change: transform;
+}
+
+.ascii-horse {
+  margin: 0;
+  font-family: var(--font-mono);
+  /* Tight leading is what turns rows of characters into a drawing. */
+  font-size: clamp(6px, 1.3vw, 17px);
+  line-height: 1;
+  white-space: pre;
+  color: var(--fg);
+  /* Cheap two-layer glow. A wide blur here would re-rasterize every glyph on
+     every frame swap and stall the compositor. */
+  text-shadow:
+    0 0 5px rgba(255, 255, 255, 0.4),
+    0 0 14px rgba(120, 160, 255, 0.22);
+}
+
+/* The horse faces right, so it runs left-to-right. Entering from the left means
+   starting a full body-width past the stage's left edge. */
+@keyframes horse-run {
+  from { transform: translateX(calc(-100% - 8vw)); }
+  to   { transform: translateX(100vw); }
+}
+
+.ascii-ground {
+  overflow: hidden;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: clamp(6px, 0.8vw, 10px);
+  color: var(--fg-20);
+  animation: ground-scroll 1.6s linear infinite;
+  will-change: transform;
+}
+
+@keyframes ground-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-7ch); } /* one GROUND tile */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ascii-horse-runner { animation: none; transform: none; }
+  .ascii-ground { animation: none; }
+}
+
+/* ===============================================================
+   CRT / VHS surface treatments
+   =============================================================== */
+
+/* Static scanlines for the non-WebGL fallback and for chrome outside the canvas. */
+.crt-scanlines::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0px,
+    rgba(0, 0, 0, 0) 2px,
+    rgba(0, 0, 0, 0.18) 3px,
+    rgba(0, 0, 0, 0.18) 4px
+  );
+}
+
 .bg-noise {
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
 }
 
-/* Animation keyframes */
-@keyframes pulse {
-  0% {
-    opacity: 0.7;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.05);
-  }
-  100% {
-    opacity: 0.7;
-    transform: scale(1);
-  }
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
 }
+.animate-spin-slow { animation: spin-slow 4s linear infinite; }
 
-@keyframes float {
-  0% {
-    transform: translateY(0px);
-  }
-  50% {
-    transform: translateY(-20px);
-  }
-  100% {
-    transform: translateY(0px);
-  }
-}
-
-@keyframes hueRotate {
-  0% {
-    filter: hue-rotate(0deg);
-  }
-  100% {
-    filter: hue-rotate(360deg);
-  }
-}
-
-/* Neon text effect */
-.neon-text {
-  animation: hueRotate 10s infinite linear;
-}
-
-/* Custom input styling */
-input[type="range"] {
-  -webkit-appearance: none;
-  height: 8px;
-  background: #111;
-  border-radius: 5px;
-  background-image: linear-gradient(to right, #ff00cc, #3333ff);
-  cursor: pointer;
-}
-
-input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
-  cursor: pointer;
-}
-
+/* The spinning vinyl in BeatCarousel. */
 .disc-wrapper {
   position: relative;
   width: 280px;
@@ -129,44 +578,92 @@ input[type="range"]::-webkit-slider-thumb {
   overflow: hidden;
 }
 
-/* this sits inside the rotating layer and gets scaled up */
+/* Sits inside the rotating layer; scaled up so its edge clears the mask. */
 .border-rotator {
   transform: scale(1.025);
 }
 
-/* ===============================
-   Custom Pink-300 Scrollbar
-   =============================== */
+@keyframes bounce-small {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.15); }
+}
+.animate-bounce-small { animation: bounce-small 0.2s ease-in-out; }
 
-/* 1) Prevent layout shift */
-html {
-  scrollbar-gutter: stable;
+/* ===============================================================
+   Range + color inputs
+   =============================================================== */
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 2px;
+  background: var(--fg-20);
+  cursor: pointer;
 }
 
-/* 2) Always show a vertical scrollbar slot */
-body {
-  overflow-y: scroll;
-}
-
-/* WebKit browsers (Chrome, Edge, Safari) */
-::-webkit-scrollbar {
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
   width: 12px;
   height: 12px;
-}
-::-webkit-scrollbar-track {
-  background: #FCE7F3;  /* pink-100 */
-}
-::-webkit-scrollbar-thumb {
-  background-color: #F9A8D4;  /* pink-300 */
-  border-radius: 6px;
-  border: 3px solid #FCE7F3;
-}
-::-webkit-scrollbar-thumb:hover {
-  background-color: #F472B6;  /* pink-400 */
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
 }
 
-/* Firefox */
+input[type="range"]::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+}
+
+input[type="color"] {
+  -webkit-appearance: none;
+  appearance: none;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--fg-20);
+}
+input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px; }
+input[type="color"]::-webkit-color-swatch { border: none; }
+
+input[type="checkbox"] { accent-color: var(--accent); }
+
+/* ===============================================================
+   Scrollbar
+   =============================================================== */
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb {
+  background-color: var(--fg-35);
+  border: 3px solid var(--bg);
+}
+::-webkit-scrollbar-thumb:hover { background-color: var(--accent); }
+
 body {
   scrollbar-width: thin;
-  scrollbar-color: #F9A8D4 #FCE7F3;
+  scrollbar-color: var(--fg-35) var(--bg);
+}
+
+/* Swiper's injected arrows don't know about our palette. */
+.mySwiper .swiper-button-next,
+.mySwiper .swiper-button-prev {
+  color: var(--fg-35);
+  transform: scale(0.5);
+  transition: color 0.15s;
+}
+.mySwiper .swiper-button-next:hover,
+.mySwiper .swiper-button-prev:hover { color: var(--accent); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

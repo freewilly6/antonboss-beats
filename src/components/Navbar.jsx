@@ -1,4 +1,8 @@
 // src/components/Navbar.jsx
+//
+// Chrome for the standalone routes (license, cart, downloads, signin). The
+// scroll page uses PillNav instead and never mounts this.
+
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useCart } from '../context/CartContext';
@@ -9,6 +13,14 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
+
+// Point at the sections directly — /beats and /about only exist as redirects now.
+const LINKS = [
+  ['/', 'Home'],
+  ['/#beats', 'Beats'],
+  ['/#about', 'About'],
+  ['/downloads', 'Downloads'],
+];
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
@@ -36,68 +48,53 @@ export default function Navbar() {
     setMobileOpen(false);
   };
 
-  const links = [
-    ['/', 'Home'],
-    ['/beats', 'Beats'],
-    ['/about', 'About'],
-    ['/contact', 'Contact'],
-    ['/downloads', 'Downloads'],
-  ];
-
   return (
     <nav
-      className={`
-        fixed top-0 left-0 w-full z-50 bg-white text-black transition-shadow
-        ${scrolled ? 'shadow-md' : ''}
-      `}
+      style={{ zIndex: 'var(--z-chrome)' }}
+      className={`fixed left-0 top-0 w-full bg-black transition-colors ${
+        scrolled ? 'border-b border-[var(--fg-10)]' : ''
+      }`}
     >
-      {/* full-width flex container */}
-      <div className="w-full flex items-center justify-between px-6 py-4">
-        {/* Logo flush left */}
+      <div className="flex w-full items-center justify-between px-6 py-4">
         <Link href="/">
           <img
             src="/images/logo.png"
-            alt="AntonBoss Logo"
-            className="h-14 sm:h-20 cursor-pointer"
+            alt="Anton Boss"
+            className="h-12 cursor-pointer invert sm:h-14"
           />
         </Link>
 
-        {/* Desktop links flush right */}
-        <div className="hidden sm:flex items-center gap-6 font-medium">
-          {links.map(([href, label]) => (
-            <Link key={href} href={href} className="hover:text-indigo-600 transition">
+        <div className="hidden items-center gap-7 sm:flex">
+          {LINKS.map(([href, label]) => (
+            <Link key={href} href={href} className="ab-label hover:text-white">
               {label}
             </Link>
           ))}
 
-          <Link href="/cart" className="hover:text-indigo-600 transition">
-            Cart <span className="ml-1 font-semibold text-pink-600">${getTotal().toFixed(2)}</span>
+          <Link href="/cart" className="ab-label hover:text-white">
+            Cart <span className="ml-1 text-[var(--accent)]">${getTotal().toFixed(2)}</span>
           </Link>
 
           {!user ? (
-            <Link href="/signin" className="hover:scale-110 transition">
-          <UserIcon className="h-6 w-6" aria-hidden="true" />
-          </Link>
+            <Link href="/signin" aria-label="Sign in" className="text-[var(--fg-50)] hover:text-white">
+              <UserIcon className="h-5 w-5" aria-hidden="true" />
+            </Link>
           ) : (
             <div className="flex items-center gap-3">
               <img
                 src={user.user_metadata?.avatar_url || '/images/user-default.png'}
-                alt="User Avatar"
-                className="w-8 h-8 rounded-full object-cover"
+                alt=""
+                className="h-8 w-8 rounded-full object-cover grayscale"
               />
-              <button
-                onClick={handleSignOut}
-                className="text-sm bg-gray-200 hover:bg-gray-300 rounded px-3 py-1"
-              >
-                Sign Out
+              <button onClick={handleSignOut} className="ab-btn ab-btn-sm">
+                Sign out
               </button>
             </div>
           )}
         </div>
 
-        {/* Mobile toggle (still flush right on xs) */}
         <button
-          className="sm:hidden text-2xl p-2"
+          className="ab-btn ab-btn-bare text-lg sm:hidden"
           onClick={() => setMobileOpen((o) => !o)}
           aria-label="Toggle menu"
         >
@@ -105,14 +102,13 @@ export default function Navbar() {
         </button>
       </div>
 
-      {/* Mobile Menu */}
       {mobileOpen && (
-        <div className="sm:hidden flex flex-col bg-white px-6 py-4 shadow-md">
-          {links.map(([href, label]) => (
+        <div className="flex flex-col border-t border-[var(--fg-10)] bg-black px-6 py-2 sm:hidden">
+          {LINKS.map(([href, label]) => (
             <Link
               key={href}
               href={href}
-              className="py-2 border-b border-gray-200 hover:text-indigo-600"
+              className="ab-label border-b border-[var(--fg-10)] py-4 hover:text-white"
               onClick={() => setMobileOpen(false)}
             >
               {label}
@@ -121,32 +117,29 @@ export default function Navbar() {
 
           <Link
             href="/cart"
-            className="py-2 border-b border-gray-200 hover:text-indigo-600"
+            className="ab-label border-b border-[var(--fg-10)] py-4 hover:text-white"
             onClick={() => setMobileOpen(false)}
           >
-            Cart <span className="ml-1 font-semibold text-pink-600">${getTotal().toFixed(2)}</span>
+            Cart <span className="ml-1 text-[var(--accent)]">${getTotal().toFixed(2)}</span>
           </Link>
 
           {!user ? (
             <Link
               href="/signin"
-              className="py-2 border-b border-gray-200 hover:text-indigo-600"
+              className="ab-label py-4 hover:text-white"
               onClick={() => setMobileOpen(false)}
             >
-              Sign In
+              Sign in
             </Link>
           ) : (
-            <div className="py-2 flex items-center gap-3">
+            <div className="flex items-center gap-3 py-4">
               <img
                 src={user.user_metadata?.avatar_url || '/images/user-default.png'}
-                alt="User Avatar"
-                className="w-8 h-8 rounded-full object-cover"
+                alt=""
+                className="h-8 w-8 rounded-full object-cover grayscale"
               />
-              <button
-                onClick={handleSignOut}
-                className="text-sm bg-gray-200 hover:bg-gray-300 rounded px-3 py-1"
-              >
-                Sign Out
+              <button onClick={handleSignOut} className="ab-btn ab-btn-sm">
+                Sign out
               </button>
             </div>
           )}
