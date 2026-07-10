@@ -24,7 +24,7 @@
     "cookie": "^1.0.2",
     "formidable": "^3.5.4",
     "js-cookie": "^3.0.5",
-    "next": "15.3.1",
+    "next": "15.3.8",
     "node-fetch": "^3.3.2",
     "node-vibrant": "^4.0.3",
     "nookies": "^2.5.2",
