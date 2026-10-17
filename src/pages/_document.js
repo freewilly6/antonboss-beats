@@ -1,5 +1,6 @@
 // pages/_document.js
 import { Html, Head, Main, NextScript } from "next/document";
+import { THEME_BOOT_SCRIPT } from "@/lib/theme";
 
 // Inlined at build time. Guarded, since a malformed or absent env var must not
 // take the whole document render down.
@@ -28,6 +29,8 @@ export default function Document() {
         {/* PWA/Web App manifest */}
         <link rel="manifest" href="/site.webmanifest" />
         <meta name="theme-color" content="#000000" />
+        {/* Applies a stored light-mode choice before first paint. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
 
         {/* Default favicon */}
         <link rel="icon" href="/favicon.ico" />

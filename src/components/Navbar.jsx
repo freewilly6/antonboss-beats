@@ -59,7 +59,7 @@ export default function Navbar() {
           <img
             src="/images/logo.png"
             alt="Anton Boss"
-            className="h-12 cursor-pointer invert sm:h-14"
+            className="h-12 ab-logo cursor-pointer sm:h-14"
           />
         </Link>
 

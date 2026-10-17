@@ -1,9 +1,12 @@
 @import "tailwindcss";
 
 /* ===============================================================
-   Tokens — the page is black, always. Nothing inverts.
+   Tokens — dark by default. Light mode (html[data-theme="light"]) swaps
+   these below; .theme-dark marks islands that stay dark either way.
    =============================================================== */
-:root {
+:root,
+.theme-dark {
+  color-scheme: dark;
   --bg: #000000;
   --fg: #ffffff;
   --accent: #ff2d95;
@@ -15,6 +18,19 @@
   --fg-35: rgba(255, 255, 255, 0.35);
   --fg-20: rgba(255, 255, 255, 0.20);
   --fg-10: rgba(255, 255, 255, 0.10);
+
+  /* Tailwind's black/white, which the components use for surfaces and ink.
+     Light mode flips them, so bg-black / text-white follow the theme. */
+  --color-black: #000;
+  --color-white: #fff;
+
+  /* The pill nav and floating Menu: the one solid object on the page,
+     always the opposite of the page. */
+  --pill-bg: #fff;
+  --pill-fg: #000;
+  --pill-dim: rgba(0, 0, 0, 0.55);
+  --pill-hover: rgba(0, 0, 0, 0.06);
+  --pill-rule: rgba(0, 0, 0, 0.12);
 
   --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
 
@@ -179,9 +195,9 @@ body {
   gap: 0.125rem;
   padding: 0.3rem;
   border-radius: 9999px;
-  background: #fff;
+  background: var(--pill-bg);
   box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.06),
+    0 0 0 1px var(--pill-hover),
     0 8px 30px rgba(0, 0, 0, 0.55);
 }
 
@@ -190,7 +206,7 @@ body {
   border-radius: 9999px;
   padding: 0.5rem 1rem;
   background: transparent;
-  color: rgba(0, 0, 0, 0.55);
+  color: var(--pill-dim);
   font-family: var(--font-mono);
   font-size: 0.625rem;
   letter-spacing: 0.2em;
@@ -200,12 +216,12 @@ body {
   transition: background-color 0.15s, color 0.15s;
 }
 
-.pill-nav-item:hover { color: #000; background: rgba(0, 0, 0, 0.06); }
+.pill-nav-item:hover { color: var(--pill-fg); background: var(--pill-hover); }
 .pill-nav-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .pill-nav-item.is-active {
-  background: #000;
-  color: #fff;
+  background: var(--pill-fg);
+  color: var(--pill-bg);
 }
 
 .pill-nav-item.has-items { color: var(--accent); }
@@ -215,7 +231,7 @@ body {
   width: 1px;
   height: 1rem;
   margin: 0 0.25rem;
-  background: rgba(0, 0, 0, 0.12);
+  background: var(--pill-rule);
 }
 
 /* ===============================================================
@@ -678,8 +694,8 @@ body {
   gap: 0.6rem;
   padding: 0.55rem 1rem;
   border-radius: 9999px;
-  background: #fff;
-  color: #000;
+  background: var(--pill-bg);
+  color: var(--pill-fg);
   font-family: var(--font-mono);
   font-size: 0.625rem;
   letter-spacing: 0.25em;
@@ -708,7 +724,8 @@ body {
   inset: 0;
   display: flex;
   flex-direction: column;
-  background: #000;
+  background: var(--bg);
+  color: var(--fg);
   clip-path: circle(0% at calc(100% - 3rem) 2.5rem);
   visibility: hidden;
   transition: clip-path 0.6s cubic-bezier(0.7, 0, 0.2, 1), visibility 0s linear 0.6s;
@@ -750,4 +767,96 @@ body {
   .site-menu,
   .site-menu.is-open,
   .site-menu-item { transition: none; }
+}
+
+/* ===============================================================
+   Light mode — html[data-theme="light"], set from the menu (lib/theme.js)
+   =============================================================== */
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f3f0e9;   /* warm paper, not screen white */
+  --fg: #111111;
+  --accent: #e0127a; /* a shade deeper, so pink text holds up on paper */
+
+  --fg-70: rgba(17, 17, 17, 0.78);
+  --fg-50: rgba(17, 17, 17, 0.62);
+  --fg-35: rgba(17, 17, 17, 0.48);
+  --fg-20: rgba(17, 17, 17, 0.22);
+  --fg-10: rgba(17, 17, 17, 0.10);
+
+  --color-black: #f3f0e9;
+  --color-white: #111111;
+
+  --pill-bg: #111111;
+  --pill-fg: #f3f0e9;
+  --pill-dim: rgba(243, 240, 233, 0.6);
+  --pill-hover: rgba(243, 240, 233, 0.1);
+  --pill-rule: rgba(243, 240, 233, 0.2);
+}
+
+/* The logo artwork is drawn for paper; dark mode inverts it. */
+.ab-logo { filter: invert(1); }
+:root[data-theme="light"] .ab-logo { filter: none; }
+
+/* Glow reads as bloom on black and as blur on paper. Ink stays crisp. */
+:root[data-theme="light"] .ab-display,
+:root[data-theme="light"] .ab-glow,
+:root[data-theme="light"] .site-menu-link,
+:root[data-theme="light"] .ascii-horse {
+  text-shadow: none;
+}
+
+/* Keep the tape, lose the darkness: lighter grain and scanlines, a soft
+   vignette instead of a black one. */
+:root[data-theme="light"] .vhs-grain { opacity: 0.06; }
+:root[data-theme="light"] .vhs-scanlines { opacity: 0.15; }
+
+/* The dark pill would vanish over the always-dark scope; a hairline keeps it. */
+:root[data-theme="light"] .pill-nav,
+:root[data-theme="light"] .site-menu-trigger {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16), 0 8px 30px rgba(0, 0, 0, 0.25);
+}
+:root[data-theme="light"] .vhs-vignette {
+  background: radial-gradient(ellipse at center, transparent 60%, rgba(60, 40, 30, 0.18) 100%);
+}
+
+/* Dark islands keep their own text colour and glow. */
+.theme-dark { color: var(--fg); }
+:root[data-theme="light"] .theme-dark .ab-display,
+:root[data-theme="light"] .theme-dark .ab-glow {
+  text-shadow: 0 0 1px rgba(255, 255, 255, 0.7), 0 0 14px rgba(255, 255, 255, 0.28);
+}
+
+/* Theme switch in the menu */
+.theme-switch {
+  display: inline-flex;
+  padding: 0.2rem;
+  border: 1px solid var(--fg-20);
+  border-radius: 9999px;
+}
+.theme-switch button {
+  border: 0;
+  border-radius: 9999px;
+  padding: 0.45rem 0.9rem;
+  background: transparent;
+  color: var(--fg-50);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
+}
+.theme-switch button:hover { color: var(--fg); }
+.theme-switch button[aria-checked="true"] {
+  background: var(--fg);
+  color: var(--bg);
+}
+.theme-switch button:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+
+/* Cross-fade the page when the theme flips, but not on first load. */
+html.theme-transition,
+html.theme-transition * {
+  transition: background-color 0.35s, color 0.35s, border-color 0.35s !important;
 }

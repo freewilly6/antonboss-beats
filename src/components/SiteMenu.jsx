@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { supabase } from '@/lib/supabaseClient';
 import { useCart } from '@/context/CartContext';
+import { getTheme, setTheme } from '@/lib/theme';
 
 const PRIMARY = [
   { href: '/#scope', label: 'Scope', note: 'The oscilloscope' },
@@ -30,11 +31,21 @@ export default function SiteMenu({ floating = false }) {
   const [open, setOpen] = useState(false);
   const [user, setUser] = useState(null);
   const [mounted, setMounted] = useState(false);
+  const [theme, setThemeState] = useState('dark');
   const router = useRouter();
   const { cart } = useCart();
   const count = cart?.length ?? 0;
 
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    setMounted(true);
+    // The boot script in _document has already applied the stored theme.
+    setThemeState(getTheme());
+  }, []);
+
+  const chooseTheme = (t) => {
+    setTheme(t);
+    setThemeState(t);
+  };
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data?.user ?? null));
@@ -116,7 +127,7 @@ export default function SiteMenu({ floating = false }) {
         >
           <div className="flex items-center justify-between px-6 py-5 sm:px-10">
             <Link href="/" onClick={() => setOpen(false)}>
-              <img src="/images/logo.png" alt="Anton Boss" className="h-10 invert" />
+              <img src="/images/logo.png" alt="Anton Boss" className="ab-logo h-10" />
             </Link>
             <button onClick={() => setOpen(false)} className="ab-btn">
               Close ×
@@ -182,7 +193,23 @@ export default function SiteMenu({ floating = false }) {
                 )}
               </div>
 
-              <ul className="flex flex-wrap gap-x-6 gap-y-3">
+              <div className="flex items-center justify-between gap-4">
+              <span className="ab-label-dim">Theme</span>
+              <div className="theme-switch" role="radiogroup" aria-label="Colour theme">
+                {['dark', 'light'].map((t) => (
+                  <button
+                    key={t}
+                    role="radio"
+                    aria-checked={theme === t}
+                    onClick={() => chooseTheme(t)}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <ul className="flex flex-wrap gap-x-6 gap-y-3">
                 {SECONDARY.map((item) => (
                   <li key={item.href}>
                     {item.external ? (

@@ -41,8 +41,9 @@ export default function Scope() {
     text.activeIndex = (text.activeIndex + 1) % text.lines.length;
   }, []);
 
+  // The tube is a screen, so it stays dark in light mode too (.theme-dark).
   return (
-    <section id="scope" className="relative min-h-screen w-full overflow-hidden">
+    <section id="scope" className="theme-dark relative min-h-screen w-full overflow-hidden">
       <VisualizerCanvas
         configRef={configRef}
         onBeat={handleBeat}
