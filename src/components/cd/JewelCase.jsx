@@ -2,8 +2,9 @@
 //
 // One clear CD case, built from primitives: a clear plastic tray framed in
 // chrome rails, a disc printed edge to edge with the cover art, a hinged clear
-// lid, and a black spine carrying the title. The art lives only on the disc —
-// the case itself is just plastic and chrome, so you see the disc through it.
+// lid with liner notes on its inside face, and a black spine carrying the
+// title. The art lives only on the disc — the case itself is plastic and
+// chrome, so you see the disc through it.
 // Dimensions follow a real case at 1 unit = 100 mm.
 //
 // The case doesn't place itself. CdShelf hands it a target pose every frame and
@@ -160,6 +161,53 @@ function useSpineTexture(beat, index) {
   }, [beat.name, index]);
 }
 
+// The inside of the lid — liner notes, seen once the case is open. One-sided
+// and facing inward, so a closed case still shows the disc through the lid.
+function useLinerTexture(beat) {
+  return useMemo(() => {
+    if (typeof document === 'undefined') return null;
+    const { texture } = makeCanvasTexture(512, 512, (ctx, w, h) => {
+      ctx.fillStyle = '#efece6';
+      ctx.fillRect(0, 0, w, h);
+
+      // Title shrinks to fit rather than being cut, same as the spine.
+      const title = beat.name.toUpperCase();
+      const room = w - 72;
+      let size = 34;
+      do {
+        ctx.font = `bold ${size}px ${MONO}`;
+      } while (ctx.measureText(title).width > room && --size > 14);
+      ctx.fillStyle = '#111';
+      ctx.fillText(title, 36, 80, room);
+      ctx.font = `20px ${MONO}`;
+      ctx.fillStyle = '#555';
+      ctx.fillText(beat.artist || 'Anton Boss', 36, 116);
+
+      const rows = [
+        ['GENRE', beat.genre],
+        ['MOOD', beat.mood],
+        ['KEY', beat.key],
+        ['BPM', beat.bpm],
+      ].filter(([, v]) => v);
+      ctx.font = `22px ${MONO}`;
+      rows.forEach(([k, v], i) => {
+        const y = 210 + i * 46;
+        ctx.fillStyle = '#999';
+        ctx.fillText(k, 36, y);
+        ctx.fillStyle = '#111';
+        ctx.fillText(String(v).toUpperCase(), 180, y, w - 216);
+      });
+
+      ctx.fillStyle = '#ff2d95';
+      ctx.fillRect(36, h - 70, 60, 6);
+      ctx.fillStyle = '#999';
+      ctx.font = `16px ${MONO}`;
+      ctx.fillText('ANTONBOSS.BEATS', 36, h - 36);
+    });
+    return texture;
+  }, [beat.name, beat.artist, beat.genre, beat.mood, beat.key, beat.bpm]);
+}
+
 // The disc face: cover art to the edge, then the hub drawn over it — a clear
 // stacking ring, a dark clamping area with chrome rings and four holes, and a
 // real hole through the middle (transparent, cut with alphaTest).
@@ -258,6 +306,7 @@ export default function JewelCase({
 
   const discMap = useDiscTexture(beat.cover);
   const spine = useSpineTexture(beat, index);
+  const liner = useLinerTexture(beat);
 
   useEffect(() => {
     if (!hovered) return;
@@ -371,6 +420,11 @@ export default function JewelCase({
           <boxGeometry args={[CASE_W, CASE_H, LID_D]} />
         </mesh>
         <ChromeFrame w={CASE_W} h={CASE_H} cx={half} z={0} brackets={false} />
+        {/* Liner notes on the inside face, turned to face the tray. */}
+        <mesh position={[half + 0.02, 0, -LID_D / 2 - 0.002]} rotation={[0, Math.PI, 0]}>
+          <planeGeometry args={[1.2, 1.16]} />
+          <meshStandardMaterial map={liner} roughness={0.8} />
+        </mesh>
       </group>
     </group>
   );
