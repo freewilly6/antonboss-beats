@@ -12,6 +12,16 @@ if (loader) loader.setCrossOrigin('anonymous');
 
 export const DEFAULT_COVER = '/images/beats/default-cover.png';
 
+// Covers are uploaded at full size, but a disc texture is 512px. Next's image
+// optimizer (already configured for the Supabase bucket in next.config.js)
+// serves a resized WebP — typically a few dozen KB instead of a few MB. 640 is
+// the smallest configured width that covers 512.
+const COVER_WIDTH = 640;
+function optimized(url) {
+  if (!url || url.startsWith('data:') || url.startsWith('blob:')) return url;
+  return `/_next/image?url=${encodeURIComponent(url)}&w=${COVER_WIDTH}&q=75`;
+}
+
 /**
  * Cover art as a texture, cached per URL so each image is fetched and decoded
  * once however many discs print it. Falls back to the default
@@ -42,10 +52,13 @@ export function getCoverTexture(url, onReady) {
     tex.userData.waiters = [];
   };
 
-  loader.load(key, (t) => done(t.image), undefined, () => {
-    if (key === DEFAULT_COVER) return;
-    loader.load(DEFAULT_COVER, (t) => done(t.image));
-  });
+  // Resized copy first, then the original, then the default cover.
+  const tries = [optimized(key), key, DEFAULT_COVER].filter((u, i, a) => a.indexOf(u) === i);
+  const attempt = (i) => {
+    if (i >= tries.length) return;
+    loader.load(tries[i], (t) => done(t.image), undefined, () => attempt(i + 1));
+  };
+  attempt(0);
 
   return tex;
 }

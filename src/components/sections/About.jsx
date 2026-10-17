@@ -3,13 +3,16 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Reveal from '@/components/Reveal';
+import { useLazyScene } from '@/hooks/useLazyScene';
 import { PADS, loadKit, startSequencer, triggerPad } from '@/components/mpc/drumKit';
 
-// three.js only loads once About is close to the viewport.
-const MpcScene = dynamic(() => import('@/components/mpc/MpcScene'), {
-  ssr: false,
-  loading: () => <div className="h-full w-full" aria-hidden="true" />,
-});
+// Prefetched when the page goes idle, mounted once About is near the viewport
+// — see useLazyScene. Fades itself in once drawn.
+const loadMpc = () => import('@/components/mpc/MpcScene');
+const MpcScene = dynamic(loadMpc, { ssr: false, loading: () => null });
+
+// How hard each kind of hit shakes the machine while the pattern plays.
+const SHAKE = { kick: 1, snare: 0.6, clap: 0.6, tom: 0.45, rim: 0.3, hihat: 0.22 };
 
 const KEY_ROWS = ['1 2 3 4', 'Q W E R', 'A S D F', 'Z X C V'];
 
@@ -22,6 +25,8 @@ export default function About() {
     playing: false,
     step: -1,
     lastStepAt: 0,
+    shakeAt: 0,
+    shake: 0,
     lastLabel: '',
     lastPad: '',
     version: 0,
@@ -30,6 +35,8 @@ export default function About() {
   const [playing, setPlaying] = useState(false);
   const [bpm, setBpm] = useState(live.bpm);
   const onScreen = useRef(false);
+  const mpcRef = useRef(null);
+  const near = useLazyScene(mpcRef, loadMpc);
   const stopSeq = useRef(null);
 
   const flash = useCallback(
@@ -72,6 +79,12 @@ export default function About() {
       onStep: (step, pads) => {
         live.step = step;
         live.lastStepAt = performance.now();
+        // Shake by the heaviest hit on this step; an empty step lets it settle.
+        const weight = Math.max(0, ...pads.map((p) => SHAKE[PADS[p].sample] ?? 0.3));
+        if (weight) {
+          live.shake = weight;
+          live.shakeAt = live.lastStepAt;
+        }
         pads.forEach(flash);
         live.version++;
       },
@@ -121,14 +134,16 @@ export default function About() {
         </Reveal>
 
         <Reveal delay={160}>
-          <div className="relative h-[22rem] w-full sm:h-[30rem]">
-            <MpcScene
-              live={live}
-              onHit={hit}
-              onTogglePlay={togglePlay}
-              onStop={stop}
-              onVisibleChange={(v) => (onScreen.current = v)}
-            />
+          <div ref={mpcRef} className="relative h-[22rem] w-full sm:h-[30rem]">
+            {near && (
+              <MpcScene
+                live={live}
+                onHit={hit}
+                onTogglePlay={togglePlay}
+                onStop={stop}
+                onVisibleChange={(v) => (onScreen.current = v)}
+              />
+            )}
           </div>
 
           <div className="mt-4 flex flex-wrap items-center justify-center gap-3">

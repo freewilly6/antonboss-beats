@@ -7,7 +7,7 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { supabase } from '@/lib/supabaseClient';
+import { loadSupabase } from '@/lib/supabaseLazy';
 import { useCart } from '@/context/CartContext';
 import { getTheme, setTheme } from '@/lib/theme';
 
@@ -48,11 +48,20 @@ export default function SiteMenu({ floating = false }) {
   };
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUser(data?.user ?? null));
-    const { data: listener } = supabase.auth.onAuthStateChange((_e, session) => {
-      setUser(session?.user ?? null);
+    // Loaded on demand — see lib/supabaseLazy.js.
+    let listener;
+    let cancelled = false;
+    loadSupabase().then((supabase) => {
+      if (cancelled) return;
+      supabase.auth.getUser().then(({ data }) => !cancelled && setUser(data?.user ?? null));
+      ({ data: listener } = supabase.auth.onAuthStateChange((_e, session) => {
+        setUser(session?.user ?? null);
+      }));
     });
-    return () => listener.subscription?.unsubscribe();
+    return () => {
+      cancelled = true;
+      listener?.subscription?.unsubscribe();
+    };
   }, []);
 
   // Close on navigation, on Escape, and lock the page scroll while open.
@@ -79,7 +88,7 @@ export default function SiteMenu({ floating = false }) {
   }, [open]);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    await (await loadSupabase()).auth.signOut();
     setOpen(false);
   };
 
@@ -127,7 +136,14 @@ export default function SiteMenu({ floating = false }) {
         >
           <div className="flex items-center justify-between px-6 py-5 sm:px-10">
             <Link href="/" onClick={() => setOpen(false)}>
-              <img src="/images/logo.png" alt="Anton Boss" className="ab-logo h-10" />
+              <img
+                src="/images/logo-256.webp"
+                alt="Anton Boss"
+                width={256}
+                height={256}
+                decoding="async"
+                className="ab-logo h-10 w-auto"
+              />
             </Link>
             <button onClick={() => setOpen(false)} className="ab-btn">
               Close ×

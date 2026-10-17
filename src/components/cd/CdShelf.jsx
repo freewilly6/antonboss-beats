@@ -8,6 +8,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { Environment, Lightformer } from '@react-three/drei';
 import JewelCase from './JewelCase';
+import { sceneFadeStyle } from '@/hooks/useLazyScene';
 
 // Only cases this close to the selection are mounted at all.
 const WINDOW = 5;
@@ -66,6 +67,7 @@ function Shelf({ beats, selected, open, playingId, onSelect, onToggleOpen }) {
 export default function CdShelf(props) {
   const wrap = useRef(null);
   const [visible, setVisible] = useState(false);
+  const [ready, setReady] = useState(false);
 
   // Stop rendering entirely while the shelf is scrolled out of view.
   useEffect(() => {
@@ -79,12 +81,16 @@ export default function CdShelf(props) {
   }, []);
 
   return (
-    <div ref={wrap} className="h-full w-full">
+    <div ref={wrap} className="h-full w-full" style={sceneFadeStyle(ready)}>
       <Canvas
         frameloop={visible ? 'always' : 'never'}
-        dpr={[1, 2]}
+        // 1.5× is indistinguishable from 2× on these soft, moving objects and
+        // shades ~45% fewer pixels on a 3× phone screen.
+        dpr={[1, 1.5]}
         camera={{ position: [0, 0.12, 3.6], fov: 35 }}
-        gl={{ antialias: true, alpha: true }}
+        gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
+        // Fade in after the first real frame, not on an empty canvas.
+        onCreated={() => requestAnimationFrame(() => requestAnimationFrame(() => setReady(true)))}
         onPointerMissed={() => props.onToggleOpen?.(false)}
       >
         <ambientLight intensity={0.35} />

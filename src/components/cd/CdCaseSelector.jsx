@@ -8,15 +8,13 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { usePlayer } from '@/context/PlayerContext';
 import { useLicenseModal } from '@/context/LicenseModalContext';
+import { useLazyScene } from '@/hooks/useLazyScene';
+import Reveal from '@/components/Reveal';
 
-const CdShelf = dynamic(() => import('./CdShelf'), {
-  ssr: false,
-  loading: () => (
-    <div className="flex h-full items-center justify-center">
-      <span className="ab-label-dim">Loading cases…</span>
-    </div>
-  ),
-});
+const loadShelf = () => import('./CdShelf');
+// No loading text: the shelf fades in when ready, and by then it's usually
+// been prefetched anyway. An empty box of the same height means no shift.
+const CdShelf = dynamic(loadShelf, { ssr: false, loading: () => null });
 
 const BASE_PRICE = 24.99;
 
@@ -24,6 +22,8 @@ export default function CdCaseSelector({ beats }) {
   const [selected, setSelected] = useState(0);
   const [open, setOpen] = useState(false);
   const swipeX = useRef(null);
+  const shelfRef = useRef(null);
+  const near = useLazyScene(shelfRef, loadShelf);
 
   const { toggleBeat, currentBeat, isPlaying } = usePlayer();
   const { openLicenseModal } = useLicenseModal();
@@ -70,6 +70,7 @@ export default function CdCaseSelector({ beats }) {
   return (
     <div>
       <div
+        ref={shelfRef}
         className="relative h-[24rem] w-full touch-pan-y outline-none sm:h-[28rem]"
         // Above the VHS overlay: the tape grain falls behind the cases, not on
         // them. The canvas is transparent, so only the cases themselves cover it.
@@ -87,20 +88,22 @@ export default function CdCaseSelector({ beats }) {
           if (Math.abs(dx) > 50) select(selected + (dx < 0 ? 1 : -1));
         }}
       >
-        <CdShelf
-          beats={beats}
-          selected={selected}
-          open={open}
-          playingId={isPlaying ? currentBeat?.id : null}
-          onSelect={select}
-          onToggleOpen={toggleOpen}
-        />
+        {near && (
+          <CdShelf
+            beats={beats}
+            selected={selected}
+            open={open}
+            playingId={isPlaying ? currentBeat?.id : null}
+            onSelect={select}
+            onToggleOpen={toggleOpen}
+          />
+        )}
         <span id={`cd-case-${beat.id}`} role="option" aria-selected="true" className="sr-only">
           {beat.name}
         </span>
       </div>
 
-      <div className="mx-auto mt-6 flex max-w-2xl flex-col items-center gap-5 text-center">
+      <Reveal delay={200} className="mx-auto mt-6 flex max-w-2xl flex-col items-center gap-5 text-center">
         <p className="ab-label-dim">
           {String(selected + 1).padStart(2, '0')} / {String(beats.length).padStart(2, '0')}
         </p>
@@ -135,7 +138,7 @@ export default function CdCaseSelector({ beats }) {
             →
           </button>
         </div>
-      </div>
+      </Reveal>
     </div>
   );
 }

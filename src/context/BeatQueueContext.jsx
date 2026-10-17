@@ -1,12 +1,8 @@
 // src/context/BeatQueueContext.jsx
 import { createContext, useContext, useState, useEffect, useMemo } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { loadSupabase } from '@/lib/supabaseLazy';
 
 const BeatQueueContext = createContext();
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
 
 export function BeatQueueProvider({ children }) {
   const [queue, setQueue] = useState([]);
@@ -16,6 +12,9 @@ export function BeatQueueProvider({ children }) {
     let cancelled = false;
 
     const fetchBeats = async () => {
+      // Loaded here, not imported up top: see lib/supabaseLazy.js.
+      const supabase = await loadSupabase();
+      if (cancelled) return;
       const { data, error } = await supabase
         .from('BeatFiles')
         .select('id,name,artist,audiourl,cover,genre,key,bpm,licenses')

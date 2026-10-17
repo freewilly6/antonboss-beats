@@ -57,9 +57,11 @@ export default function Navbar() {
       <div className="flex w-full items-center justify-between px-6 py-4">
         <Link href="/">
           <img
-            src="/images/logo.png"
+            src="/images/logo-256.webp"
             alt="Anton Boss"
-            className="h-12 ab-logo cursor-pointer sm:h-14"
+            width={256}
+            height={256}
+            className="ab-logo h-12 w-auto cursor-pointer sm:h-14"
           />
         </Link>
 

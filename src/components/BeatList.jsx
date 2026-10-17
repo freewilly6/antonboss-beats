@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Listbox } from '@headlessui/react';
 import { CheckIcon } from '@heroicons/react/20/solid';
 import CdCaseSelector from './cd/CdCaseSelector';
+import Reveal from './Reveal';
 
 export default function BeatList({ beats }) {
   const [searchTerm, setSearchTerm]       = useState('');
@@ -65,79 +66,82 @@ export default function BeatList({ beats }) {
 
   return (
     <div className="space-y-10">
-      {/* Search */}
-      <input
-        type="text"
-        placeholder="Search beats, mood, key, artist (comma-separated)…"
-        value={searchTerm}
-        onChange={e => setSearchTerm(e.target.value)}
-        className="ab-field"
-      />
+      <Reveal delay={120} className="space-y-10">
+        {/* Search */}
+        <input
+          type="text"
+          placeholder="Search beats, mood, key, artist (comma-separated)…"
+          value={searchTerm}
+          onChange={e => setSearchTerm(e.target.value)}
+          className="ab-field"
+        />
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-4">
-        {/* Mood */}
-        <Listbox
-          value={selectedMood}
-          onChange={val => setSelectedMood(prev => (prev === val ? '' : val))}
-        >
-          <div className="relative">
-            <Listbox.Button className={`${filterBtnBase} ${selectedMood ? 'ab-btn-active' : ''}`}>
-              {selectedMood || 'Filter Mood'}
-            </Listbox.Button>
-            <Listbox.Options className={`${optionsBase} w-40`}>
-              {['Dark','Chill','Aggressive','Euphoric','Dance'].map(m => (
-                <Listbox.Option key={m} value={m} className={optionClass}>
-                  {({ selected }) => (
-                    <>
-                      {selected && <CheckIcon className="w-4 h-4 text-[var(--accent)]" />}
-                      <span className={selected ? 'text-white' : 'text-[var(--fg-50)]'}>{m}</span>
-                    </>
-                  )}
-                </Listbox.Option>
-              ))}
-            </Listbox.Options>
-          </div>
-        </Listbox>
-
-        {/* Artist */}
-        <Listbox
-          value={selectedArtist}
-          onChange={val => setSelectedArtist(prev => (prev === val ? '' : val))}
-        >
-          <div className="relative">
-            <Listbox.Button className={`${filterBtnBase} ${selectedArtist ? 'ab-btn-active' : ''}`}>
-              {selectedArtist || 'Filter Artist'}
-            </Listbox.Button>
-            <Listbox.Options className={`${optionsBase} max-h-64 w-48 overflow-auto`}>
-              {artists.map(a => (
-                <Listbox.Option key={a} value={a} className={optionClass}>
-                  {({ selected }) => (
-                    <>
-                      {selected && <CheckIcon className="w-4 h-4 text-[var(--accent)]" />}
-                      <span className={selected ? 'text-white' : 'text-[var(--fg-50)]'}>{a}</span>
-                    </>
-                  )}
-                </Listbox.Option>
-              ))}
-            </Listbox.Options>
-          </div>
-        </Listbox>
-
-        {/* Clear Filters */}
-        {(selectedMood || selectedKey || selectedArtist) && (
-          <button
-            onClick={() => {
-              setSelectedMood('');
-              setSelectedKey('');
-              setSelectedArtist('');
-            }}
-            className="ab-btn"
+        {/* Filters */}
+        <div className="flex flex-wrap gap-4">
+          {/* Mood */}
+          <Listbox
+            value={selectedMood}
+            onChange={val => setSelectedMood(prev => (prev === val ? '' : val))}
           >
-            Clear Filters
-          </button>
-        )}
-      </div>
+            <div className="relative">
+              <Listbox.Button className={`${filterBtnBase} ${selectedMood ? 'ab-btn-active' : ''}`}>
+                {selectedMood || 'Filter Mood'}
+              </Listbox.Button>
+              <Listbox.Options className={`${optionsBase} w-40`}>
+                {['Dark','Chill','Aggressive','Euphoric','Dance'].map(m => (
+                  <Listbox.Option key={m} value={m} className={optionClass}>
+                    {({ selected }) => (
+                      <>
+                        {selected && <CheckIcon className="w-4 h-4 text-[var(--accent)]" />}
+                        <span className={selected ? 'text-white' : 'text-[var(--fg-50)]'}>{m}</span>
+                      </>
+                    )}
+                  </Listbox.Option>
+                ))}
+              </Listbox.Options>
+            </div>
+          </Listbox>
+
+          {/* Artist */}
+          <Listbox
+            value={selectedArtist}
+            onChange={val => setSelectedArtist(prev => (prev === val ? '' : val))}
+          >
+            <div className="relative">
+              <Listbox.Button className={`${filterBtnBase} ${selectedArtist ? 'ab-btn-active' : ''}`}>
+                {selectedArtist || 'Filter Artist'}
+              </Listbox.Button>
+              <Listbox.Options className={`${optionsBase} max-h-64 w-48 overflow-auto`}>
+                {artists.map(a => (
+                  <Listbox.Option key={a} value={a} className={optionClass}>
+                    {({ selected }) => (
+                      <>
+                        {selected && <CheckIcon className="w-4 h-4 text-[var(--accent)]" />}
+                        <span className={selected ? 'text-white' : 'text-[var(--fg-50)]'}>{a}</span>
+                      </>
+                    )}
+                  </Listbox.Option>
+                ))}
+              </Listbox.Options>
+            </div>
+          </Listbox>
+
+          {/* Clear Filters */}
+          {(selectedMood || selectedKey || selectedArtist) && (
+            <button
+              onClick={() => {
+                setSelectedMood('');
+                setSelectedKey('');
+                setSelectedArtist('');
+              }}
+              className="ab-btn"
+            >
+              Clear Filters
+            </button>
+          )}
+        </div>
+
+      </Reveal>
 
       {/* The shelf shows whatever the search and filters leave. */}
       {beatsWithAudio.length ? (

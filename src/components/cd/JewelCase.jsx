@@ -14,6 +14,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { getCoverTexture, makeCanvasTexture, MONO } from './textures';
 
 export const CASE_W = 1.42;
@@ -82,46 +83,77 @@ function damp(current, target, lambda, dt) {
   return THREE.MathUtils.damp(current, target, lambda, dt);
 }
 
-/** A chrome bar from (x1,y1) to (x2,y2), axis-aligned, at depth z. */
-function Rail({ x1, y1, x2, y2, z, t = 0.022, d = 0.022 }) {
-  const w = Math.abs(x2 - x1) || t;
-  const h = Math.abs(y2 - y1) || t;
-  return (
-    <mesh position={[(x1 + x2) / 2, (y1 + y2) / 2, z]} material={chrome}>
-      <boxGeometry args={[w, h, d]} />
-    </mesh>
-  );
+// ── Chrome rails ────────────────────────────────────────────────────────────
+// Every case has the same ~25 rail pieces. As separate meshes that's ~25 draw
+// calls a case, ~275 for a full shelf. They never move relative to their
+// slab, so they're baked into two shared geometries — tray and lid — and each
+// case draws its rails in two calls.
+
+/** An axis-aligned bar from (x1,y1) to (x2,y2) at depth z. */
+function bar(x1, y1, x2, y2, z, t = 0.022, d = 0.022) {
+  const g = new THREE.BoxGeometry(Math.abs(x2 - x1) || t, Math.abs(y2 - y1) || t, d);
+  g.translate((x1 + x2) / 2, (y1 + y2) / 2, z);
+  return g;
 }
 
-/** The outer chrome rim of a slab, plus L-shaped brackets in each corner. */
-function ChromeFrame({ w, h, z, cx = 0, brackets = true }) {
-  const x0 = cx - w / 2;
-  const x1 = cx + w / 2;
-  const y0 = -h / 2;
-  const y1 = h / 2;
-  const i = 0.09; // bracket inset
-  const L = 0.3; // bracket arm length
-  return (
-    <group>
-      <Rail x1={x0} y1={y0} x2={x1} y2={y0} z={z} t={0.016} />
-      <Rail x1={x0} y1={y1} x2={x1} y2={y1} z={z} t={0.016} />
-      <Rail x1={x0} y1={y0} x2={x0} y2={y1} z={z} t={0.016} />
-      <Rail x1={x1} y1={y0} x2={x1} y2={y1} z={z} t={0.016} />
-      {brackets &&
-        [
-          [x0 + i, y1 - i, 1, -1],
-          [x1 - i, y1 - i, -1, -1],
-          [x0 + i, y0 + i, 1, 1],
-          [x1 - i, y0 + i, -1, 1],
-        ].map(([bx, by, sx, sy]) => (
-          <group key={`${bx}-${by}`}>
-            <Rail x1={bx} y1={by} x2={bx + sx * L} y2={by} z={z} />
-            <Rail x1={bx} y1={by} x2={bx} y2={by + sy * L} z={z} />
-          </group>
-        ))}
-    </group>
-  );
+/** The outer rim of a slab, optionally with L-brackets in each corner. */
+function frameBars(cx, z, brackets) {
+  const x0 = cx - CASE_W / 2;
+  const x1 = cx + CASE_W / 2;
+  const y0 = -CASE_H / 2;
+  const y1 = CASE_H / 2;
+  const bars = [
+    bar(x0, y0, x1, y0, z, 0.016),
+    bar(x0, y1, x1, y1, z, 0.016),
+    bar(x0, y0, x0, y1, z, 0.016),
+    bar(x1, y0, x1, y1, z, 0.016),
+  ];
+  if (brackets) {
+    const i = 0.09; // inset
+    const L = 0.3; // arm length
+    [
+      [x0 + i, y1 - i, 1, -1],
+      [x1 - i, y1 - i, -1, -1],
+      [x0 + i, y0 + i, 1, 1],
+      [x1 - i, y0 + i, -1, 1],
+    ].forEach(([bx, by, sx, sy]) => {
+      bars.push(bar(bx, by, bx + sx * L, by, z), bar(bx, by, bx, by + sy * L, z));
+    });
+  }
+  return bars;
 }
+
+const TRAY_Z = -CASE_D / 2 + TRAY_D / 2;
+
+function buildTrayRails() {
+  const z = TRAY_Z + TRAY_D / 2 - 0.012;
+  const lx = -CASE_W / 2 + 0.13;
+  const parts = [
+    ...frameBars(0, z, true),
+    // Latch on the hinge side.
+    bar(lx - 0.06, -0.15, lx + 0.06, -0.15, z, 0.014),
+    bar(lx - 0.06, 0.15, lx + 0.06, 0.15, z, 0.014),
+    bar(lx + 0.06, -0.15, lx + 0.06, 0.15, z, 0.014),
+  ];
+  // The four clips that hold the disc rim.
+  [0.6, 2.55, 3.75, 5.7].forEach((a) => {
+    const clip = new THREE.BoxGeometry(0.03, 0.012, 0.03);
+    clip.rotateZ(a);
+    clip.translate(DISC_X + Math.cos(a) * (DISC_R + 0.012), Math.sin(a) * (DISC_R + 0.012), 0.004);
+    parts.push(clip);
+  });
+  return mergeGeometries(parts);
+}
+
+const trayRailGeo = buildTrayRails();
+const lidRailGeo = mergeGeometries(frameBars(CASE_W / 2, 0, false));
+
+// Slabs and spine, shared by every case.
+const trayGeo = new THREE.BoxGeometry(CASE_W, CASE_H, TRAY_D);
+const lidGeo = new THREE.BoxGeometry(CASE_W, CASE_H, LID_D);
+const spinePlaneGeo = new THREE.PlaneGeometry(CASE_D, CASE_H);
+const spineBoxGeo = new THREE.BoxGeometry(0.009, CASE_H, CASE_D);
+const linerGeo = new THREE.PlaneGeometry(1.2, 1.16);
 
 function useSpineTexture(beat, index) {
   return useMemo(() => {
@@ -163,9 +195,10 @@ function useSpineTexture(beat, index) {
 
 // The inside of the lid — liner notes, seen once the case is open. One-sided
 // and facing inward, so a closed case still shows the disc through the lid.
-function useLinerTexture(beat) {
+function useLinerTexture(beat, enabled) {
   return useMemo(() => {
-    if (typeof document === 'undefined') return null;
+    // Only the selected case can open, so only it needs its notes drawn.
+    if (!enabled || typeof document === 'undefined') return null;
     const { texture } = makeCanvasTexture(512, 512, (ctx, w, h) => {
       ctx.fillStyle = '#efece6';
       ctx.fillRect(0, 0, w, h);
@@ -205,7 +238,7 @@ function useLinerTexture(beat) {
       ctx.fillText('ANTONBOSS.BEATS', 36, h - 36);
     });
     return texture;
-  }, [beat.name, beat.artist, beat.genre, beat.mood, beat.key, beat.bpm]);
+  }, [enabled, beat.name, beat.artist, beat.genre, beat.mood, beat.key, beat.bpm]);
 }
 
 // The disc face: cover art to the edge, then the hub drawn over it — a clear
@@ -275,19 +308,24 @@ function drawDisc(ctx, w, h, image) {
 }
 
 function useDiscTexture(coverUrl) {
-  const [texture, setTexture] = useState(null);
+  // Created during the first render, never later: a material first drawn
+  // without a map compiles a shader with no texture slot, and assigning one
+  // afterwards doesn't recompile it, so the disc stays blank. The cover is
+  // drawn into this same texture once it loads.
+  const [canvas] = useState(() =>
+    typeof document === 'undefined' ? null : makeCanvasTexture(512, 512, (ctx, w, h) => drawDisc(ctx, w, h, null))
+  );
 
   useEffect(() => {
-    if (typeof document === 'undefined') return;
-    const { texture: tex, redraw } = makeCanvasTexture(512, 512, (ctx, w, h) => drawDisc(ctx, w, h, null));
-    setTexture(tex);
+    if (!canvas) return;
     getCoverTexture(coverUrl, (cover) => {
-      redraw((ctx, w, h) => drawDisc(ctx, w, h, cover.image));
+      canvas.redraw((ctx, w, h) => drawDisc(ctx, w, h, cover.image));
     });
-    return () => tex.dispose();
-  }, [coverUrl]);
+  }, [canvas, coverUrl]);
 
-  return texture;
+  useEffect(() => () => canvas?.texture.dispose(), [canvas]);
+
+  return canvas?.texture ?? null;
 }
 
 export default function JewelCase({
@@ -306,7 +344,7 @@ export default function JewelCase({
 
   const discMap = useDiscTexture(beat.cover);
   const spine = useSpineTexture(beat, index);
-  const liner = useLinerTexture(beat);
+  const liner = useLinerTexture(beat, selected);
 
   useEffect(() => {
     if (!hovered) return;
@@ -345,13 +383,14 @@ export default function JewelCase({
   });
 
   const half = CASE_W / 2;
-  const trayZ = -CASE_D / 2 + TRAY_D / 2;
 
   return (
     <group
       ref={root}
-      position={[target.x, target.y, target.z]}
-      rotation={[0, target.ry, 0]}
+      // Mount low and far back, then ease into place: the shelf rises into
+      // view the first time it's seen instead of popping in already set.
+      position={[target.x, target.y - 0.7, target.z - 1.6]}
+      rotation={[0.35, target.ry, 0]}
       onClick={(e) => {
         // Ignore the click that ends a swipe.
         if (e.delta > 6) return;
@@ -364,38 +403,16 @@ export default function JewelCase({
       }}
       onPointerOut={() => setHovered(false)}
     >
-      {/* Tray: clear slab, chrome rim and corner brackets */}
-      <mesh position={[0, 0, trayZ]} material={plastic}>
-        <boxGeometry args={[CASE_W, CASE_H, TRAY_D]} />
-      </mesh>
-      <ChromeFrame w={CASE_W} h={CASE_H} z={trayZ + TRAY_D / 2 - 0.012} />
-
-      {/* Latch on the hinge side, and the four clips that hold the disc rim */}
-      <group position={[-half + 0.13, 0, trayZ + TRAY_D / 2 - 0.012]}>
-        <Rail x1={-0.06} y1={-0.15} x2={0.06} y2={-0.15} z={0} t={0.014} />
-        <Rail x1={-0.06} y1={0.15} x2={0.06} y2={0.15} z={0} t={0.014} />
-        <Rail x1={0.06} y1={-0.15} x2={0.06} y2={0.15} z={0} t={0.014} />
-      </group>
-      {[0.6, 2.55, 3.75, 5.7].map((a) => (
-        <mesh
-          key={a}
-          position={[DISC_X + Math.cos(a) * (DISC_R + 0.012), Math.sin(a) * (DISC_R + 0.012), 0.004]}
-          rotation={[0, 0, a]}
-          material={chrome}
-        >
-          <boxGeometry args={[0.03, 0.012, 0.03]} />
-        </mesh>
-      ))}
+      {/* Tray: clear slab, then its rim, brackets, latch and disc clips */}
+      <mesh position={[0, 0, TRAY_Z]} geometry={trayGeo} material={plastic} />
+      <mesh geometry={trayRailGeo} material={chrome} />
 
       {/* Spine on the hinge edge, just proud of the chrome rails so they can't
           cover the title. */}
-      <mesh position={[-half - 0.014, 0, 0]} rotation={[0, -Math.PI / 2, 0]}>
-        <planeGeometry args={[CASE_D, CASE_H]} />
+      <mesh position={[-half - 0.014, 0, 0]} rotation={[0, -Math.PI / 2, 0]} geometry={spinePlaneGeo}>
         <meshStandardMaterial map={spine} roughness={0.4} />
       </mesh>
-      <mesh position={[-half - 0.009, 0, 0]} material={spineMat}>
-        <boxGeometry args={[0.009, CASE_H, CASE_D]} />
-      </mesh>
+      <mesh position={[-half - 0.009, 0, 0]} geometry={spineBoxGeo} material={spineMat} />
 
       {/* Disc. The art is opaque, so it's drawn before the plastic and shows
           through the lid. The foil backs it, for the view from behind. */}
@@ -416,15 +433,14 @@ export default function JewelCase({
 
       {/* Lid, pivoting on the hinge. Children are offset so x=0 is the hinge line. */}
       <group ref={lid} position={[-half, 0, CASE_D / 2 - LID_D / 2]}>
-        <mesh position={[half, 0, 0]} material={plastic}>
-          <boxGeometry args={[CASE_W, CASE_H, LID_D]} />
-        </mesh>
-        <ChromeFrame w={CASE_W} h={CASE_H} cx={half} z={0} brackets={false} />
+        <mesh position={[half, 0, 0]} geometry={lidGeo} material={plastic} />
+        <mesh geometry={lidRailGeo} material={chrome} />
         {/* Liner notes on the inside face, turned to face the tray. */}
-        <mesh position={[half + 0.02, 0, -LID_D / 2 - 0.002]} rotation={[0, Math.PI, 0]}>
-          <planeGeometry args={[1.2, 1.16]} />
-          <meshStandardMaterial map={liner} roughness={0.8} />
-        </mesh>
+        {liner && (
+          <mesh position={[half + 0.02, 0, -LID_D / 2 - 0.002]} rotation={[0, Math.PI, 0]} geometry={linerGeo}>
+            <meshStandardMaterial map={liner} roughness={0.8} />
+          </mesh>
+        )}
       </group>
     </group>
   );

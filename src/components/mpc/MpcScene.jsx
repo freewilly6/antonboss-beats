@@ -14,6 +14,7 @@ import { Environment, Lightformer, RoundedBox } from '@react-three/drei';
 import * as THREE from 'three';
 import { PADS, PATTERN } from './drumKit';
 import { makeCanvasTexture, MONO } from '../cd/textures';
+import { sceneFadeStyle } from '@/hooks/useLazyScene';
 
 const BODY_W = 3.4;
 const BODY_D = 3.0;
@@ -219,19 +220,43 @@ function PanelPrint() {
   );
 }
 
+const SHAKE_MS = 170; // how long one hit's shake rings out
+
 function Machine({ live, onHit, onTogglePlay, onStop }) {
   const group = useRef();
+  const shaker = useRef();
+  const intro = useRef(0);
   const { viewport } = useThree();
   const scale = Math.min(1, viewport.width / 3.9);
 
   useFrame((state, dt) => {
     const g = group.current;
     const t = state.clock.elapsedTime;
+    dt = Math.min(dt, 0.05);
+
+    // Rise and settle into place the first time it's drawn.
+    intro.current = THREE.MathUtils.damp(intro.current, 1, 2.6, dt);
+    const away = 1 - intro.current;
+
     // Lean toward the pointer, and bob gently on the beat while the sequencer runs.
     const beat = live.playing ? Math.max(0, 1 - (performance.now() - live.lastStepAt) / 140) : 0;
     g.rotation.y = THREE.MathUtils.damp(g.rotation.y, state.pointer.x * 0.25, 4, dt);
-    g.rotation.x = THREE.MathUtils.damp(g.rotation.x, -state.pointer.y * 0.12, 4, dt);
-    g.position.y = Math.sin(t * 1.2) * 0.03 - beat * 0.02;
+    g.rotation.x = THREE.MathUtils.damp(g.rotation.x, -state.pointer.y * 0.12, 4, dt) + away * 0.6;
+    g.position.y = Math.sin(t * 1.2) * 0.03 - beat * 0.02 - away * 0.9;
+
+    // Shake on the hits while the pattern plays: a short, decaying rattle,
+    // strongest on the kick. Layered sines at unrelated rates read as a
+    // physical jolt rather than a wobble. Lives on its own group so it adds
+    // to the tilt above instead of fighting it.
+    const sh = shaker.current;
+    const age = performance.now() - live.shakeAt;
+    const k = live.playing && age < SHAKE_MS ? (1 - age / SHAKE_MS) ** 2 * live.shake : 0;
+    sh.position.x = (Math.sin(t * 91) + Math.sin(t * 57) * 0.6) * 0.022 * k;
+    sh.position.z = Math.sin(t * 73 + 1.3) * 0.018 * k;
+    sh.position.y = -0.05 * k;
+    sh.rotation.z = Math.sin(t * 83 + 0.7) * 0.035 * k;
+    sh.rotation.x = Math.sin(t * 67) * 0.02 * k;
+    sh.scale.setScalar(1 + 0.012 * k);
   });
 
   const bodyMat = useMemo(
@@ -242,43 +267,45 @@ function Machine({ live, onHit, onTogglePlay, onStop }) {
   return (
     <group scale={scale}>
       <group ref={group}>
-        <RoundedBox args={[BODY_W, BODY_H, BODY_D]} radius={0.1} smoothness={4} material={bodyMat} />
-        {/* Darker sunken deck under the pads */}
-        <RoundedBox args={[4 * (PAD + GAP) + 0.12, 0.02, 4 * (PAD + GAP) + 0.12]} radius={0.03} position={[PADS_X, TOP, PADS_Z]}>
-          <meshStandardMaterial color="#18181a" roughness={0.7} />
-        </RoundedBox>
-        <PanelPrint />
-        <Lcd live={live} />
+        <group ref={shaker}>
+          <RoundedBox args={[BODY_W, BODY_H, BODY_D]} radius={0.1} smoothness={4} material={bodyMat} />
+          {/* Darker sunken deck under the pads */}
+          <RoundedBox args={[4 * (PAD + GAP) + 0.12, 0.02, 4 * (PAD + GAP) + 0.12]} radius={0.03} position={[PADS_X, TOP, PADS_Z]}>
+            <meshStandardMaterial color="#18181a" roughness={0.7} />
+          </RoundedBox>
+          <PanelPrint />
+          <Lcd live={live} />
 
-        {PADS.map((p) => (
-          <Pad key={p.index} index={p.index} live={live} onHit={onHit} />
-        ))}
+          {PADS.map((p) => (
+            <Pad key={p.index} index={p.index} live={live} onHit={onHit} />
+          ))}
 
-        {/* Data wheel and pots */}
-        <Knob position={[-0.55, TOP, 0.25]} r={0.24} live={live} spin />
-        <Knob position={[0.38, TOP, -1.0]} live={live} />
-        <Knob position={[0.72, TOP, -1.0]} live={live} />
-        <Knob position={[1.06, TOP, -1.0]} live={live} />
-        <Knob position={[1.40, TOP, -1.0]} live={live} />
+          {/* Data wheel and pots */}
+          <Knob position={[-0.55, TOP, 0.25]} r={0.24} live={live} spin />
+          <Knob position={[0.38, TOP, -1.0]} live={live} />
+          <Knob position={[0.72, TOP, -1.0]} live={live} />
+          <Knob position={[1.06, TOP, -1.0]} live={live} />
+          <Knob position={[1.40, TOP, -1.0]} live={live} />
 
-        {/* Function grid */}
-        {[0, 1, 2].map((r) =>
-          [0, 1].map((c) => (
-            <SmallButton key={`${r}-${c}`} position={[-1.42 + c * 0.32, 0, -0.08 + r * 0.3]} live={live} />
-          ))
-        )}
+          {/* Function grid */}
+          {[0, 1, 2].map((r) =>
+            [0, 1].map((c) => (
+              <SmallButton key={`${r}-${c}`} position={[-1.42 + c * 0.32, 0, -0.08 + r * 0.3]} live={live} />
+            ))
+          )}
 
-        {/* Transport */}
-        <SmallButton position={[-1.42, 0, 1.18]} led="#ff0000" live={live} ledOn={() => false} color="#5a1f2b" />
-        <SmallButton position={[-1.12, 0, 1.18]} live={live} onClick={onStop} />
-        <SmallButton
-          position={[-0.82, 0, 1.18]}
-          led="#ff2d95"
-          live={live}
-          ledOn={(l) => l.playing && l.step % 4 < 2}
-          onClick={onTogglePlay}
-          color="#ff2d95"
-        />
+          {/* Transport */}
+          <SmallButton position={[-1.42, 0, 1.18]} led="#ff0000" live={live} ledOn={() => false} color="#5a1f2b" />
+          <SmallButton position={[-1.12, 0, 1.18]} live={live} onClick={onStop} />
+          <SmallButton
+            position={[-0.82, 0, 1.18]}
+            led="#ff2d95"
+            live={live}
+            ledOn={(l) => l.playing && l.step % 4 < 2}
+            onClick={onTogglePlay}
+            color="#ff2d95"
+          />
+        </group>
       </group>
     </group>
   );
@@ -287,6 +314,7 @@ function Machine({ live, onHit, onTogglePlay, onStop }) {
 export default function MpcScene(props) {
   const wrap = useRef(null);
   const [visible, setVisible] = useState(false);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     const el = wrap.current;
@@ -302,13 +330,16 @@ export default function MpcScene(props) {
   }, []);
 
   return (
-    <div ref={wrap} className="h-full w-full">
+    <div ref={wrap} className="h-full w-full" style={sceneFadeStyle(ready)}>
       <Canvas
         frameloop={visible ? 'always' : 'never'}
-        dpr={[1, 2]}
+        dpr={[1, 1.5]}
         camera={{ position: [0, 4.1, 3.3], fov: 36 }}
-        onCreated={({ camera }) => camera.lookAt(0, -0.2, 0.1)}
-        gl={{ antialias: true, alpha: true }}
+        onCreated={({ camera }) => {
+          camera.lookAt(0, -0.2, 0.1);
+          requestAnimationFrame(() => requestAnimationFrame(() => setReady(true)));
+        }}
+        gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
       >
         <ambientLight intensity={0.4} />
         <directionalLight position={[3, 5, 2]} intensity={1.8} />

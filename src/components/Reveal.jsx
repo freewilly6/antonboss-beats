@@ -26,9 +26,10 @@ export default function Reveal({ children, delay = 0, className = '', as: Tag = 
         setShown(true);
         io.unobserve(entry.target); // reveal once; don't re-fade on scroll back
       },
-      // Fire a little before the block is fully on screen, so the fade finishes
-      // roughly as it settles rather than starting late.
-      { threshold: 0.12, rootMargin: '0px 0px -8% 0px' }
+      // Start the moment the block's top edge clears the bottom few percent of
+      // the screen. Waiting for 12% of it to be visible left tall blocks blank
+      // for a beat while you scrolled into them.
+      { threshold: 0, rootMargin: '0px 0px -4% 0px' }
     );
 
     io.observe(el);
