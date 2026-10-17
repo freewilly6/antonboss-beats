@@ -13,12 +13,12 @@ import JewelCase from './JewelCase';
 const WINDOW = 5;
 
 function poseFor(offset, spread, open, narrow) {
-  // Open, the lid folds out to the left until its liner notes face you. Slide
-  // the case right so the open pair is centred, and further back on narrow
-  // screens so both halves fit.
+  // Open, the lid folds out flat to the left. Slide the case right by half a
+  // case so the open pair is centred, and further back on narrow screens so
+  // both halves fit.
   if (offset === 0) {
     return open
-      ? { x: 0.6, y: -0.02, z: narrow ? -2.6 : -0.5, ry: 0.1, rx: 0 }
+      ? { x: 0.71, y: -0.02, z: narrow ? -2.3 : -0.85, ry: 0, rx: 0 }
       : { x: 0, y: 0, z: 0.55, ry: 0, rx: 0 };
   }
   const side = Math.sign(offset);
@@ -95,8 +95,10 @@ export default function CdShelf(props) {
             light panels in-scene, so no HDR file is downloaded. */}
         <Environment resolution={256}>
           <Lightformer intensity={2} position={[0, 3, 2]} scale={[6, 1, 1]} />
-          <Lightformer intensity={1.2} position={[-4, 0, 1]} rotation-y={Math.PI / 2} scale={[4, 2, 1]} />
-          <Lightformer intensity={1.2} position={[4, 0, 1]} rotation-y={-Math.PI / 2} scale={[4, 2, 1]} />
+          {/* Side panels are thin strips: broad ones mirror whole in the angled
+              cases' plastic and flare them white; strips leave a glint. */}
+          <Lightformer intensity={1} position={[-4, 0, 1]} rotation-y={Math.PI / 2} scale={[0.35, 3, 1]} />
+          <Lightformer intensity={1} position={[4, 0, 1]} rotation-y={-Math.PI / 2} scale={[0.35, 3, 1]} />
           <Lightformer intensity={1.5} color="#ff2d95" position={[0, -3, 1]} scale={[5, 1, 1]} />
         </Environment>
 

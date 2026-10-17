@@ -1,9 +1,10 @@
 // src/components/cd/JewelCase.jsx
 //
-// One CD jewel case, built from primitives: a clear back shell holding a black
-// tray, a disc printed with the cover art, a hinged clear lid with the cover
-// insert behind it, and a spine. Dimensions follow a real case (142 × 125 ×
-// 10 mm) at 1 unit = 100 mm.
+// One clear CD case, built from primitives: a clear plastic tray framed in
+// chrome rails, a disc printed edge to edge with the cover art, a hinged clear
+// lid, and a black spine carrying the title. The art lives only on the disc —
+// the case itself is just plastic and chrome, so you see the disc through it.
+// Dimensions follow a real case at 1 unit = 100 mm.
 //
 // The case doesn't place itself. CdShelf hands it a target pose every frame and
 // it eases toward it, so selecting, opening and playing are all just new
@@ -17,27 +18,50 @@ import { getCoverTexture, makeCanvasTexture, MONO } from './textures';
 export const CASE_W = 1.42;
 export const CASE_H = 1.25;
 const CASE_D = 0.104;
-const LID_D = 0.02;
-const DISC_R = 0.6;
-const HOLE_R = 0.075;
+const TRAY_D = 0.07;
+const LID_D = 0.024;
+const DISC_R = 0.58;
+const DISC_X = 0.05; // the disc sits a little right of centre, clear of the hinge
 
-const LID_OPEN = -2.55; // radians around the hinge; negative swings toward the camera
+// Nearly flat open, like a case laid open on a table.
+const LID_OPEN = -Math.PI * 0.94;
 const SPIN_SPEED = 4.2; // rad/s while the beat is playing
 
 // Shared across every case — one program per material, not one per case.
 const plastic = new THREE.MeshPhysicalMaterial({
-  color: '#ffffff',
+  // Black body: with additive blending only the specular glints show, which
+  // is all clear plastic really is to the eye.
+  color: '#000000',
   metalness: 0,
-  roughness: 0.04,
-  clearcoat: 1,
+  roughness: 0.03,
   clearcoatRoughness: 0.02,
   transparent: true,
-  opacity: 0.16,
+  // Additive on colour only: the plastic adds its reflections and glints to
+  // whatever is behind it and never dims it — alpha blending fogged the case
+  // into a grey slab on the black page. Alpha is left untouched so the canvas
+  // stays see-through there and the light lands on the page itself.
+  blending: THREE.CustomBlending,
+  blendEquation: THREE.AddEquation,
+  blendSrc: THREE.OneFactor,
+  blendDst: THREE.OneFactor,
+  blendSrcAlpha: THREE.ZeroFactor,
+  blendDstAlpha: THREE.OneFactor,
+  // Tamed so cases seen side-on glint rather than flare white.
+  specularIntensity: 0.45,
+  clearcoat: 0.5,
+  envMapIntensity: 0.7,
   depthWrite: false,
   side: THREE.DoubleSide,
 });
-const tray = new THREE.MeshStandardMaterial({ color: '#0a0a0a', roughness: 0.55 });
-const hinge = new THREE.MeshStandardMaterial({ color: '#141414', roughness: 0.35, metalness: 0.2 });
+// Brushed silver rather than a pure mirror: a mirror is only as bright as
+// what it reflects, and on a black stage that's mostly nothing.
+const chrome = new THREE.MeshPhysicalMaterial({
+  color: '#dfe2e8',
+  metalness: 0.55,
+  roughness: 0.28,
+  clearcoat: 1,
+  clearcoatRoughness: 0.1,
+});
 const discFoil = new THREE.MeshPhysicalMaterial({
   color: '#d8d8d8',
   metalness: 1,
@@ -47,13 +71,55 @@ const discFoil = new THREE.MeshPhysicalMaterial({
   iridescenceThicknessRange: [120, 900],
   side: THREE.DoubleSide,
 });
+const spineMat = new THREE.MeshStandardMaterial({ color: '#0b0b0b', roughness: 0.4 });
 
-const ringGeo = new THREE.RingGeometry(HOLE_R, DISC_R, 96, 1);
-const labelGeo = new THREE.RingGeometry(0.2, DISC_R - 0.025, 96, 1);
-const hubGeo = new THREE.CylinderGeometry(0.11, 0.11, 0.018, 32);
+const discGeo = new THREE.CircleGeometry(DISC_R, 128);
+const foilGeo = new THREE.RingGeometry(0.06, DISC_R, 128, 1);
+const rimGeo = new THREE.RingGeometry(DISC_R - 0.006, DISC_R + 0.004, 128, 1);
 
 function damp(current, target, lambda, dt) {
   return THREE.MathUtils.damp(current, target, lambda, dt);
+}
+
+/** A chrome bar from (x1,y1) to (x2,y2), axis-aligned, at depth z. */
+function Rail({ x1, y1, x2, y2, z, t = 0.022, d = 0.022 }) {
+  const w = Math.abs(x2 - x1) || t;
+  const h = Math.abs(y2 - y1) || t;
+  return (
+    <mesh position={[(x1 + x2) / 2, (y1 + y2) / 2, z]} material={chrome}>
+      <boxGeometry args={[w, h, d]} />
+    </mesh>
+  );
+}
+
+/** The outer chrome rim of a slab, plus L-shaped brackets in each corner. */
+function ChromeFrame({ w, h, z, cx = 0, brackets = true }) {
+  const x0 = cx - w / 2;
+  const x1 = cx + w / 2;
+  const y0 = -h / 2;
+  const y1 = h / 2;
+  const i = 0.09; // bracket inset
+  const L = 0.3; // bracket arm length
+  return (
+    <group>
+      <Rail x1={x0} y1={y0} x2={x1} y2={y0} z={z} t={0.016} />
+      <Rail x1={x0} y1={y1} x2={x1} y2={y1} z={z} t={0.016} />
+      <Rail x1={x0} y1={y0} x2={x0} y2={y1} z={z} t={0.016} />
+      <Rail x1={x1} y1={y0} x2={x1} y2={y1} z={z} t={0.016} />
+      {brackets &&
+        [
+          [x0 + i, y1 - i, 1, -1],
+          [x1 - i, y1 - i, -1, -1],
+          [x0 + i, y0 + i, 1, 1],
+          [x1 - i, y0 + i, -1, 1],
+        ].map(([bx, by, sx, sy]) => (
+          <group key={`${bx}-${by}`}>
+            <Rail x1={bx} y1={by} x2={bx + sx * L} y2={by} z={z} />
+            <Rail x1={bx} y1={by} x2={bx} y2={by + sy * L} z={z} />
+          </group>
+        ))}
+    </group>
+  );
 }
 
 function useSpineTexture(beat, index) {
@@ -69,59 +135,111 @@ function useSpineTexture(beat, index) {
       ctx.textAlign = 'center';
       ctx.fillText(String(index + 1).padStart(2, '0'), w / 2, h - 18);
 
-      // Spine text reads top-to-bottom, like a shelf of real CDs.
+      // Spine text reads top-to-bottom, like a shelf of real CDs. Left-aligned
+      // from the top edge, and shrunk until the whole title fits above the
+      // artist credit — a long name must never run off the end.
       ctx.save();
-      ctx.translate(w / 2, 18);
+      ctx.translate(w / 2, 16);
       ctx.rotate(Math.PI / 2);
-      ctx.fillStyle = '#fff';
-      ctx.font = `24px ${MONO}`;
+      ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
-      ctx.fillText(beat.name.toUpperCase().slice(0, 22), 0, 0);
+      const title = beat.name.toUpperCase();
+      const room = 330;
+      let size = 24;
+      do {
+        ctx.font = `${size}px ${MONO}`;
+      } while (ctx.measureText(title).width > room && --size > 11);
+      ctx.fillStyle = '#fff';
+      ctx.fillText(title, 0, 0, room);
       ctx.fillStyle = 'rgba(255,255,255,0.45)';
-      ctx.font = `16px ${MONO}`;
-      ctx.fillText('ANTON BOSS', 400, 0);
+      ctx.font = `15px ${MONO}`;
+      ctx.fillText('ANTON BOSS', 360, 0);
       ctx.restore();
     });
     return texture;
   }, [beat.name, index]);
 }
 
-// The inside of the lid — what you see once the case is open. Liner notes.
-function useLinerTexture(beat) {
-  return useMemo(() => {
-    if (typeof document === 'undefined') return null;
-    const { texture } = makeCanvasTexture(512, 512, (ctx, w, h) => {
-      ctx.fillStyle = '#efece6';
-      ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = '#111';
-      ctx.font = `bold 34px ${MONO}`;
-      ctx.fillText(beat.name.toUpperCase().slice(0, 18), 36, 80);
-      ctx.font = `20px ${MONO}`;
-      ctx.fillStyle = '#555';
-      ctx.fillText(beat.artist || 'Anton Boss', 36, 116);
+// The disc face: cover art to the edge, then the hub drawn over it — a clear
+// stacking ring, a dark clamping area with chrome rings and four holes, and a
+// real hole through the middle (transparent, cut with alphaTest).
+function drawDisc(ctx, w, h, image) {
+  const c = w / 2;
+  const R = w / 2;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(c, c, R, 0, Math.PI * 2);
+  ctx.clip();
 
-      const rows = [
-        ['GENRE', beat.genre],
-        ['KEY', beat.key],
-        ['BPM', beat.bpm],
-      ].filter(([, v]) => v);
-      ctx.font = `22px ${MONO}`;
-      rows.forEach(([k, v], i) => {
-        const y = 210 + i * 46;
-        ctx.fillStyle = '#999';
-        ctx.fillText(k, 36, y);
-        ctx.fillStyle = '#111';
-        ctx.fillText(String(v).toUpperCase(), 180, y);
-      });
+  if (image) {
+    // Cover-fit the art into the disc.
+    const s = Math.max(w / image.width, h / image.height);
+    const iw = image.width * s;
+    const ih = image.height * s;
+    ctx.drawImage(image, (w - iw) / 2, (h - ih) / 2, iw, ih);
+  } else {
+    ctx.fillStyle = '#222';
+    ctx.fillRect(0, 0, w, h);
+  }
 
-      ctx.fillStyle = '#ff2d95';
-      ctx.fillRect(36, h - 70, 60, 6);
-      ctx.fillStyle = '#999';
-      ctx.font = `16px ${MONO}`;
-      ctx.fillText('ANTONBOSS.BEATS', 36, h - 36);
+  // A soft sweep of light across the print, so it reads as a glossy disc.
+  const sheen = ctx.createLinearGradient(0, 0, w, h);
+  sheen.addColorStop(0, 'rgba(255,255,255,0.16)');
+  sheen.addColorStop(0.45, 'rgba(255,255,255,0)');
+  sheen.addColorStop(0.6, 'rgba(255,255,255,0.1)');
+  sheen.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = sheen;
+  ctx.fillRect(0, 0, w, h);
+  ctx.restore();
+
+  const r = (f) => R * f;
+  // Clear stacking ring around the hub.
+  ctx.fillStyle = 'rgba(210,212,218,0.55)';
+  ctx.beginPath();
+  ctx.arc(c, c, r(0.34), 0, Math.PI * 2);
+  ctx.fill();
+  // Dark clamping area.
+  ctx.fillStyle = '#1b1b1e';
+  ctx.beginPath();
+  ctx.arc(c, c, r(0.3), 0, Math.PI * 2);
+  ctx.fill();
+  // Chrome rings.
+  ctx.strokeStyle = '#d9dbe0';
+  ctx.lineWidth = r(0.012);
+  [0.27, 0.2, 0.13].forEach((f) => {
+    ctx.beginPath();
+    ctx.arc(c, c, r(f), 0, Math.PI * 2);
+    ctx.stroke();
+  });
+  // Four holes on the clamp.
+  for (let k = 0; k < 4; k++) {
+    const a = Math.PI / 4 + (k * Math.PI) / 2;
+    ctx.beginPath();
+    ctx.arc(c + Math.cos(a) * r(0.235), c + Math.sin(a) * r(0.235), r(0.026), 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  // The spindle hole.
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.beginPath();
+  ctx.arc(c, c, r(0.1), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+function useDiscTexture(coverUrl) {
+  const [texture, setTexture] = useState(null);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const { texture: tex, redraw } = makeCanvasTexture(512, 512, (ctx, w, h) => drawDisc(ctx, w, h, null));
+    setTexture(tex);
+    getCoverTexture(coverUrl, (cover) => {
+      redraw((ctx, w, h) => drawDisc(ctx, w, h, cover.image));
     });
-    return texture;
-  }, [beat.name, beat.artist, beat.genre, beat.key, beat.bpm]);
+    return () => tex.dispose();
+  }, [coverUrl]);
+
+  return texture;
 }
 
 export default function JewelCase({
@@ -136,13 +254,10 @@ export default function JewelCase({
   const root = useRef();
   const lid = useRef();
   const disc = useRef();
-  const [, force] = useState(0);
   const [hovered, setHovered] = useState(false);
 
-  // Re-render once the cover finishes loading so the material picks it up.
-  const cover = useMemo(() => getCoverTexture(beat.cover, () => force((n) => n + 1)), [beat.cover]);
+  const discMap = useDiscTexture(beat.cover);
   const spine = useSpineTexture(beat, index);
-  const liner = useLinerTexture(beat);
 
   useEffect(() => {
     if (!hovered) return;
@@ -173,17 +288,15 @@ export default function JewelCase({
 
     lid.current.rotation.y = damp(lid.current.rotation.y, open ? LID_OPEN : 0, 5, dt);
 
-    // The disc lifts out of the tray once the lid is mostly clear of it.
-    const lidProgress = lid.current.rotation.y / LID_OPEN;
-    const out = open && lidProgress > 0.45;
+    // The disc stays seated in the tray; it rises a hair off the spindle
+    // while it plays, and spins.
     const d = disc.current;
-    d.position.z = damp(d.position.z, out ? 0.34 : CASE_D * 0.08, 5, dt);
-    d.position.x = damp(d.position.x, out ? 0.22 : 0, 5, dt);
-    d.rotation.y = damp(d.rotation.y, out ? -0.18 : 0, 5, dt);
-    if (spinning) d.children[0].rotation.z -= SPIN_SPEED * dt;
+    d.position.z = damp(d.position.z, spinning ? 0.03 : 0.012, 6, dt);
+    if (spinning) d.rotation.z -= SPIN_SPEED * dt;
   });
 
   const half = CASE_W / 2;
+  const trayZ = -CASE_D / 2 + TRAY_D / 2;
 
   return (
     <group
@@ -202,51 +315,62 @@ export default function JewelCase({
       }}
       onPointerOut={() => setHovered(false)}
     >
-      {/* Back shell + black tray */}
-      <mesh position={[0, 0, -CASE_D / 2 + 0.03]} material={plastic}>
-        <boxGeometry args={[CASE_W, CASE_H, 0.06]} />
+      {/* Tray: clear slab, chrome rim and corner brackets */}
+      <mesh position={[0, 0, trayZ]} material={plastic}>
+        <boxGeometry args={[CASE_W, CASE_H, TRAY_D]} />
       </mesh>
-      <mesh position={[0.04, 0, -0.004]} material={tray}>
-        <boxGeometry args={[CASE_W - 0.12, CASE_H - 0.04, 0.012]} />
-      </mesh>
-      <mesh position={[0.04, 0, 0.008]} rotation={[Math.PI / 2, 0, 0]} material={hinge} geometry={hubGeo} />
+      <ChromeFrame w={CASE_W} h={CASE_H} z={trayZ + TRAY_D / 2 - 0.012} />
 
-      {/* Spine on the hinge edge */}
-      <mesh position={[-half - 0.001, 0, 0]} rotation={[0, -Math.PI / 2, 0]}>
+      {/* Latch on the hinge side, and the four clips that hold the disc rim */}
+      <group position={[-half + 0.13, 0, trayZ + TRAY_D / 2 - 0.012]}>
+        <Rail x1={-0.06} y1={-0.15} x2={0.06} y2={-0.15} z={0} t={0.014} />
+        <Rail x1={-0.06} y1={0.15} x2={0.06} y2={0.15} z={0} t={0.014} />
+        <Rail x1={0.06} y1={-0.15} x2={0.06} y2={0.15} z={0} t={0.014} />
+      </group>
+      {[0.6, 2.55, 3.75, 5.7].map((a) => (
+        <mesh
+          key={a}
+          position={[DISC_X + Math.cos(a) * (DISC_R + 0.012), Math.sin(a) * (DISC_R + 0.012), 0.004]}
+          rotation={[0, 0, a]}
+          material={chrome}
+        >
+          <boxGeometry args={[0.03, 0.012, 0.03]} />
+        </mesh>
+      ))}
+
+      {/* Spine on the hinge edge, just proud of the chrome rails so they can't
+          cover the title. */}
+      <mesh position={[-half - 0.014, 0, 0]} rotation={[0, -Math.PI / 2, 0]}>
         <planeGeometry args={[CASE_D, CASE_H]} />
         <meshStandardMaterial map={spine} roughness={0.4} />
       </mesh>
-      <mesh position={[-half + 0.04, 0, 0]} material={hinge}>
-        <boxGeometry args={[0.08, CASE_H, CASE_D * 0.9]} />
+      <mesh position={[-half - 0.009, 0, 0]} material={spineMat}>
+        <boxGeometry args={[0.009, CASE_H, CASE_D]} />
       </mesh>
 
-      {/* Disc — the outer group slides out, the inner one spins. */}
-      <group ref={disc} position={[0.04, 0, CASE_D * 0.08]}>
-        <group>
-          <mesh geometry={ringGeo} material={discFoil} />
-          <mesh geometry={labelGeo} position={[0, 0, 0.002]}>
-            <meshStandardMaterial map={cover} roughness={0.45} metalness={0.1} />
-          </mesh>
-        </group>
+      {/* Disc. The art is opaque, so it's drawn before the plastic and shows
+          through the lid. The foil backs it, for the view from behind. */}
+      <group ref={disc} position={[DISC_X, 0, 0.012]}>
+        <mesh geometry={foilGeo} position={[0, 0, -0.003]} material={discFoil} />
+        <mesh geometry={discGeo}>
+          <meshPhysicalMaterial
+            map={discMap}
+            alphaTest={0.5}
+            roughness={0.28}
+            metalness={0.1}
+            clearcoat={1}
+            clearcoatRoughness={0.08}
+          />
+        </mesh>
+        <mesh geometry={rimGeo} position={[0, 0, 0.001]} material={chrome} />
       </group>
 
       {/* Lid, pivoting on the hinge. Children are offset so x=0 is the hinge line. */}
       <group ref={lid} position={[-half, 0, CASE_D / 2 - LID_D / 2]}>
-        <mesh position={[0.82, 0, -0.002]}>
-          <planeGeometry args={[1.18, 1.18]} />
-          <meshStandardMaterial map={cover} roughness={0.5} />
-        </mesh>
-        <mesh position={[0.82, 0, -0.004]} rotation={[0, Math.PI, 0]}>
-          <planeGeometry args={[1.18, 1.18]} />
-          <meshStandardMaterial map={liner} roughness={0.8} />
-        </mesh>
         <mesh position={[half, 0, 0]} material={plastic}>
           <boxGeometry args={[CASE_W, CASE_H, LID_D]} />
         </mesh>
-        {/* Ribbed hinge strip on the lid */}
-        <mesh position={[0.09, 0, 0]} material={hinge}>
-          <boxGeometry args={[0.1, CASE_H, LID_D + 0.004]} />
-        </mesh>
+        <ChromeFrame w={CASE_W} h={CASE_H} cx={half} z={0} brackets={false} />
       </group>
     </group>
   );

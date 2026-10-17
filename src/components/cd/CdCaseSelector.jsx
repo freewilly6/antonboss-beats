@@ -70,7 +70,10 @@ export default function CdCaseSelector({ beats }) {
   return (
     <div>
       <div
-        className="relative h-[24rem] w-full touch-pan-y outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] sm:h-[28rem]"
+        className="relative h-[24rem] w-full touch-pan-y outline-none sm:h-[28rem]"
+        // Above the VHS overlay: the tape grain falls behind the cases, not on
+        // them. The canvas is transparent, so only the cases themselves cover it.
+        style={{ zIndex: 'calc(var(--z-overlay) + 1)' }}
         tabIndex={0}
         role="listbox"
         aria-label="Beat cases. Arrow keys to browse, Enter to open, Space to play."
@@ -101,7 +104,7 @@ export default function CdCaseSelector({ beats }) {
         <p className="ab-label-dim">
           {String(selected + 1).padStart(2, '0')} / {String(beats.length).padStart(2, '0')}
         </p>
-        <div className="min-w-0">
+        <div className="w-full min-w-0">
           <p className="ab-display truncate">{beat.name}</p>
           <p className="ab-meta mt-3 truncate">
             {[beat.genre, beat.mood, beat.key, beat.bpm && `${beat.bpm} BPM`, beat.artist]

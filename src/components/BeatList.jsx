@@ -57,7 +57,7 @@ export default function BeatList({ beats }) {
 
   const filterBtnBase = 'ab-btn';
   const optionsBase =
-    'absolute z-10 mt-1 border border-[var(--fg-20)] bg-black';
+    'absolute z-[calc(var(--z-overlay)+2)] mt-1 border border-[var(--fg-20)] bg-black';
   const optionClass = ({ active }) =>
     `flex items-center gap-2 px-4 py-2 cursor-pointer text-xs ${
       active ? 'bg-white/10' : ''

@@ -13,15 +13,18 @@ if (loader) loader.setCrossOrigin('anonymous');
 export const DEFAULT_COVER = '/images/beats/default-cover.png';
 
 /**
- * Cover art as a texture. Cached per URL so the same cover on the lid insert
- * and the disc label is uploaded to the GPU once. Falls back to the default
+ * Cover art as a texture, cached per URL so each image is fetched and decoded
+ * once however many discs print it. Falls back to the default
  * cover if the image can't be loaded (bad URL, missing CORS header).
+ * `onReady(texture)` fires once the image is in, synchronously if cached.
  */
 export function getCoverTexture(url, onReady) {
   const key = url || DEFAULT_COVER;
   const cached = coverCache.get(key);
   if (cached) {
-    if (cached.image) onReady?.();
+    // Already loaded: call back straight away. The texture is passed in, since
+    // the caller hasn't received the return value yet at this point.
+    if (cached.image) onReady?.(cached);
     else cached.userData.waiters.push(onReady);
     return cached;
   }
@@ -35,7 +38,7 @@ export function getCoverTexture(url, onReady) {
   const done = (img) => {
     tex.image = img;
     tex.needsUpdate = true;
-    tex.userData.waiters.forEach((fn) => fn?.());
+    tex.userData.waiters.forEach((fn) => fn?.(tex));
     tex.userData.waiters = [];
   };
 
