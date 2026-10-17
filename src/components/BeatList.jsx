@@ -2,19 +2,13 @@
 import { useState } from 'react';
 import { Listbox } from '@headlessui/react';
 import { CheckIcon } from '@heroicons/react/20/solid';
-import { usePlayer } from '../context/PlayerContext';
-import BeatCarousel from './BeatCarousel';
-import { useLicenseModal } from '@/context/LicenseModalContext';
+import CdCaseSelector from './cd/CdCaseSelector';
 
 export default function BeatList({ beats }) {
   const [searchTerm, setSearchTerm]       = useState('');
   const [selectedMood, setSelectedMood]   = useState('');
   const [selectedKey, setSelectedKey]     = useState('');
   const [selectedArtist, setSelectedArtist] = useState('');
-
-  const { playBeat }           = usePlayer();
-  const { openLicenseModal }   = useLicenseModal();
-  const basePrice              = 24.99;
 
   // ────────────────────────────────────────────────────────
   // 1. Normalize & filter: include `id` explicitly here!
@@ -145,50 +139,11 @@ export default function BeatList({ beats }) {
         )}
       </div>
 
-      {/* Carousel */}
-      <BeatCarousel beats={beatsWithAudio} />
-
-      {/* Results */}
-      {(searchTerm || selectedMood || selectedKey || selectedArtist) && (
-        <div className="space-y-6">
-          <h2 className="ab-label mt-6">Search Results</h2>
-          {filteredBeats.length > 0 ? (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              {filteredBeats.map(beat => (
-                <div
-                  key={beat.id}
-                  className="ab-card flex cursor-pointer items-center gap-4 p-4"
-                  onClick={() => playBeat(beat)}  // sends full beat, including id
-                >
-                  <img
-                    src={beat.cover}
-                    alt={beat.name}
-                    className="h-16 w-16 object-cover grayscale"
-                  />
-                  <div className="flex min-w-0 flex-grow flex-col gap-1">
-                    <h3 className="truncate text-sm">{beat.name}</h3>
-                    <p className="ab-meta truncate">
-                      {[beat.genre, beat.mood, beat.key, beat.bpm, beat.artist]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </p>
-                  </div>
-                  <button
-                    onClick={e => {
-                      e.stopPropagation();
-                      openLicenseModal(beat);   // also gets full beat with id
-                    }}
-                    className="ab-btn ab-btn-sm"
-                  >
-                    From ${basePrice.toFixed(2)}
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="ab-label-dim text-center">No beats found</p>
-          )}
-        </div>
+      {/* The shelf shows whatever the search and filters leave. */}
+      {beatsWithAudio.length ? (
+        <CdCaseSelector beats={filteredBeats} />
+      ) : (
+        <p className="ab-label-dim py-24 text-center">Loading beats…</p>
       )}
     </div>
   );

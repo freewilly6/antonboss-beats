@@ -1,80 +1,154 @@
 // src/components/sections/About.jsx
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import Reveal from '@/components/Reveal';
+import { PADS, loadKit, startSequencer, triggerPad } from '@/components/mpc/drumKit';
 
-const PADS = [
-  { name: 'kick', key: 'k' },
-  { name: 'snare', key: 's' },
-  { name: 'hihat', key: 'h' },
-  { name: 'clap', key: 'c' },
-  { name: 'tom', key: 't' },
-  { name: 'rim', key: 'r' },
-];
+// three.js only loads once About is close to the viewport.
+const MpcScene = dynamic(() => import('@/components/mpc/MpcScene'), {
+  ssr: false,
+  loading: () => <div className="h-full w-full" aria-hidden="true" />,
+});
+
+const KEY_ROWS = ['1 2 3 4', 'Q W E R', 'A S D F', 'Z X C V'];
 
 export default function About() {
-  const [activePad, setActivePad] = useState(null);
-  const [lastHit, setLastHit] = useState('');
+  // Read every frame by the scene. Mutated in place, never set as state, so
+  // hitting pads doesn't re-render the section.
+  const live = useRef({
+    hits: new Float64Array(PADS.length).fill(-1e9),
+    bpm: 92,
+    playing: false,
+    step: -1,
+    lastStepAt: 0,
+    lastLabel: '',
+    lastPad: '',
+    version: 0,
+  }).current;
 
-  const playSound = useCallback((name) => {
-    // One-shot samples, deliberately outside the global player — they layer over
-    // whatever beat is running rather than interrupting it.
-    const audio = new Audio(`/audio/${name}.wav`);
-    audio.play().catch(() => {});
-    setActivePad(name);
-    setLastHit(name.toUpperCase());
-    setTimeout(() => setActivePad(null), 200);
-  }, []);
+  const [playing, setPlaying] = useState(false);
+  const [bpm, setBpm] = useState(live.bpm);
+  const onScreen = useRef(false);
+  const stopSeq = useRef(null);
+
+  const flash = useCallback(
+    (index) => {
+      live.hits[index] = performance.now();
+      live.lastLabel = PADS[index].label;
+      live.lastPad = PADS[index].name;
+      live.version++;
+    },
+    [live]
+  );
+
+  const hit = useCallback(
+    (index) => {
+      loadKit().then(() => triggerPad(index));
+      flash(index);
+    },
+    [flash]
+  );
+
+  const stop = useCallback(() => {
+    stopSeq.current?.();
+    stopSeq.current = null;
+    live.playing = false;
+    live.step = -1;
+    live.version++;
+    setPlaying(false);
+  }, [live]);
+
+  const togglePlay = useCallback(async () => {
+    if (stopSeq.current) return stop();
+    live.playing = true;
+    live.version++;
+    setPlaying(true);
+    await loadKit();
+    // Stopped again while samples were still loading.
+    if (!live.playing) return;
+    stopSeq.current = startSequencer({
+      getBpm: () => live.bpm,
+      onStep: (step, pads) => {
+        live.step = step;
+        live.lastStepAt = performance.now();
+        pads.forEach(flash);
+        live.version++;
+      },
+    });
+  }, [flash, live, stop]);
+
+  const nudgeBpm = (delta) => {
+    live.bpm = Math.max(60, Math.min(160, live.bpm + delta));
+    live.version++;
+    setBpm(live.bpm);
+  };
+
+  useEffect(() => stop, [stop]);
 
   useEffect(() => {
     const onKey = (e) => {
-      // The visualizer's lyric input lives on this same page now — typing "k"
-      // there must not fire a kick drum.
+      // Only while the machine is on screen, and never while typing — the
+      // visualizer's lyric input and the beat search live on this page too.
+      if (!onScreen.current || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
       const tag = e.target?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target?.isContentEditable) return;
 
-      const match = PADS.find((p) => p.key === e.key.toLowerCase());
-      if (match) playSound(match.name);
+      const pad = PADS.find((p) => p.key === e.key.toLowerCase());
+      if (pad) hit(pad.index);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [playSound]);
+  }, [hit]);
 
   return (
     <section id="about" className="relative min-h-screen w-full px-6 py-28 sm:px-10">
-      <div className="mx-auto grid max-w-6xl items-center gap-20 md:grid-cols-2">
+      <div className="mx-auto grid max-w-6xl items-center gap-16 md:grid-cols-[2fr_3fr]">
         <Reveal>
           <h2 className="ab-label mb-3">About</h2>
           <p className="ab-display mt-10 max-w-md">
             Just your average noise-making enjoyer.
           </p>
           <p className="ab-body mt-8 max-w-md">
-            Check the YouTube channel for remixes, or hit the pads. Keys{' '}
-            <span className="text-[var(--accent)]">K S H C T R</span>.
+            Check the YouTube channel for remixes, or get on the pads. Click them, or
+            play them from your keyboard:
           </p>
+          <div className="mt-5 grid w-max gap-1 font-mono text-xs tracking-[0.4em] text-[var(--accent)]">
+            {KEY_ROWS.map((row) => (
+              <span key={row}>{row}</span>
+            ))}
+          </div>
         </Reveal>
 
-        <Reveal delay={160} className="flex flex-col items-center">
-          <div className="mb-10 flex h-16 w-64 items-center justify-center border border-[var(--fg-20)]">
-            <span
-              className="font-mono text-xl tracking-[0.3em]"
-              style={{ color: lastHit ? 'var(--accent)' : 'var(--fg-35)' }}
-            >
-              {lastHit || 'READY'}
-            </span>
+        <Reveal delay={160}>
+          <div className="relative h-[22rem] w-full sm:h-[30rem]">
+            <MpcScene
+              live={live}
+              onHit={hit}
+              onTogglePlay={togglePlay}
+              onStop={stop}
+              onVisibleChange={(v) => (onScreen.current = v)}
+            />
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            {PADS.map((pad) => (
-              <button
-                key={pad.name}
-                onClick={() => playSound(pad.name)}
-                className={`ab-btn h-24 w-24 flex-col gap-1 ${
-                  activePad === pad.name ? 'ab-btn-solid' : ''
-                }`}
-              >
-                <span>{pad.name}</span>
-                <span className="opacity-40">{pad.key}</span>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+            <button className={`ab-btn ${playing ? 'ab-btn-active' : ''}`} onClick={togglePlay}>
+              {playing ? 'Stop pattern' : 'Play pattern'}
+            </button>
+            <button className="ab-btn" onClick={() => nudgeBpm(-4)} aria-label="Slower">
+              −
+            </button>
+            <span className="ab-label w-20 text-center">{bpm} BPM</span>
+            <button className="ab-btn" onClick={() => nudgeBpm(4)} aria-label="Faster">
+              +
+            </button>
+          </div>
+
+          {/* The 3D pads can't take keyboard focus; these can. */}
+          <div className="sr-only">
+            {PADS.map((p) => (
+              <button key={p.index} onClick={() => hit(p.index)}>
+                Pad {p.name}, {p.label}
               </button>
             ))}
           </div>

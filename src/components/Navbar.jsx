@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import { useCart } from '../context/CartContext';
 import { createClient } from '@supabase/supabase-js';
 import { UserIcon } from '@heroicons/react/24/outline';
+import SiteMenu from './SiteMenu';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -19,14 +20,13 @@ const LINKS = [
   ['/', 'Home'],
   ['/#beats', 'Beats'],
   ['/#about', 'About'],
-  ['/downloads', 'Downloads'],
+  ['/account', 'Account'],
 ];
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [user, setUser] = useState(null);
   const { getTotal } = useCart();
-  const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 10);
@@ -45,7 +45,6 @@ export default function Navbar() {
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     setUser(null);
-    setMobileOpen(false);
   };
 
   return (
@@ -64,7 +63,7 @@ export default function Navbar() {
           />
         </Link>
 
-        <div className="hidden items-center gap-7 sm:flex">
+        <div className="ml-auto mr-7 hidden items-center gap-7 sm:flex">
           {LINKS.map(([href, label]) => (
             <Link key={href} href={href} className="ab-label hover:text-white">
               {label}
@@ -81,11 +80,13 @@ export default function Navbar() {
             </Link>
           ) : (
             <div className="flex items-center gap-3">
-              <img
-                src={user.user_metadata?.avatar_url || '/images/user-default.png'}
-                alt=""
-                className="h-8 w-8 rounded-full object-cover grayscale"
-              />
+              <Link href="/account" aria-label="Your account">
+                <img
+                  src={user.user_metadata?.avatar_url || '/images/user-default.png'}
+                  alt=""
+                  className="h-8 w-8 rounded-full object-cover grayscale transition hover:grayscale-0"
+                />
+              </Link>
               <button onClick={handleSignOut} className="ab-btn ab-btn-sm">
                 Sign out
               </button>
@@ -93,58 +94,9 @@ export default function Navbar() {
           )}
         </div>
 
-        <button
-          className="ab-btn ab-btn-bare text-lg sm:hidden"
-          onClick={() => setMobileOpen((o) => !o)}
-          aria-label="Toggle menu"
-        >
-          {mobileOpen ? '×' : '☰'}
-        </button>
+        {/* On small screens this is the only control; it carries every link above. */}
+        <SiteMenu />
       </div>
-
-      {mobileOpen && (
-        <div className="flex flex-col border-t border-[var(--fg-10)] bg-black px-6 py-2 sm:hidden">
-          {LINKS.map(([href, label]) => (
-            <Link
-              key={href}
-              href={href}
-              className="ab-label border-b border-[var(--fg-10)] py-4 hover:text-white"
-              onClick={() => setMobileOpen(false)}
-            >
-              {label}
-            </Link>
-          ))}
-
-          <Link
-            href="/cart"
-            className="ab-label border-b border-[var(--fg-10)] py-4 hover:text-white"
-            onClick={() => setMobileOpen(false)}
-          >
-            Cart <span className="ml-1 text-[var(--accent)]">${getTotal().toFixed(2)}</span>
-          </Link>
-
-          {!user ? (
-            <Link
-              href="/signin"
-              className="ab-label py-4 hover:text-white"
-              onClick={() => setMobileOpen(false)}
-            >
-              Sign in
-            </Link>
-          ) : (
-            <div className="flex items-center gap-3 py-4">
-              <img
-                src={user.user_metadata?.avatar_url || '/images/user-default.png'}
-                alt=""
-                className="h-8 w-8 rounded-full object-cover grayscale"
-              />
-              <button onClick={handleSignOut} className="ab-btn ab-btn-sm">
-                Sign out
-              </button>
-            </div>
-          )}
-        </div>
-      )}
     </nav>
   );
 }
