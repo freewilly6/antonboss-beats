@@ -11,7 +11,7 @@
 // it eases toward it, so selecting, opening and playing are all just new
 // targets rather than hand-sequenced animations.
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -346,6 +346,18 @@ export default function JewelCase({
   const spine = useSpineTexture(beat, index);
   const liner = useLinerTexture(beat, selected);
 
+  // Starting pose, set once on mount: low and far back, so the case rises
+  // into place the first time it's seen. Deliberately not a position prop —
+  // R3F re-applies props on every re-render, which snapped every case back
+  // to its start pose on each selection and replaced the sideways slide
+  // between cases with a drop-and-rise. After mount, useFrame alone moves it.
+  useLayoutEffect(() => {
+    root.current.position.set(target.x, target.y - 0.7, target.z - 1.6);
+    root.current.rotation.set(0.35, target.ry, 0);
+    // Mount-only by design; later targets are eased to in useFrame.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (!hovered) return;
     document.body.style.cursor = 'pointer';
@@ -387,10 +399,6 @@ export default function JewelCase({
   return (
     <group
       ref={root}
-      // Mount low and far back, then ease into place: the shelf rises into
-      // view the first time it's seen instead of popping in already set.
-      position={[target.x, target.y - 0.7, target.z - 1.6]}
-      rotation={[0.35, target.ry, 0]}
       onClick={(e) => {
         // Ignore the click that ends a swipe.
         if (e.delta > 6) return;

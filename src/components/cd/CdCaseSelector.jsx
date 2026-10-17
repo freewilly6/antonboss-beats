@@ -1,8 +1,9 @@
 // src/components/cd/CdCaseSelector.jsx
 //
 // Beat selection as a shelf of 3D CD cases. Arrow keys, swipes or clicks move
-// along the shelf; clicking the front case (or Enter) opens it and the disc
-// slides out; playing a beat spins its disc.
+// along the shelf; Random spins down the shelf and lands on a surprise;
+// clicking the front case (or Enter) opens it to show the beat's notes;
+// playing a beat spins its disc.
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
@@ -33,14 +34,56 @@ export default function CdCaseSelector({ beats }) {
     setSelected((s) => Math.min(s, Math.max(0, beats.length - 1)));
   }, [beats.length]);
 
+  // Pending hop of a Random spin, if one is running.
+  const spinTimer = useRef(null);
+  const [spinning, setSpinning] = useState(false);
+
+  const cancelSpin = useCallback(() => {
+    clearTimeout(spinTimer.current);
+    spinTimer.current = null;
+    setSpinning(false);
+  }, []);
+
+  useEffect(() => cancelSpin, [cancelSpin]);
+
   const select = useCallback(
     (i) => {
       if (!beats.length) return;
+      cancelSpin(); // a manual pick always wins over a spin in progress
       setSelected(Math.max(0, Math.min(beats.length - 1, i)));
       setOpen(false);
     },
-    [beats.length]
+    [beats.length, cancelSpin]
   );
+
+  // Random: rather than jump, run along the shelf case by case toward a random
+  // pick, each hop a little slower than the last, like a slot reel winding
+  // down. The cases' own easing does the sliding between hops.
+  const randomize = () => {
+    if (beats.length < 2 || spinning) return;
+    let target = selected;
+    while (target === selected) target = Math.floor(Math.random() * beats.length);
+
+    const from = selected;
+    const hops = Math.min(Math.abs(target - from), 9);
+    setOpen(false);
+    setSpinning(true);
+
+    let k = 0;
+    const hop = () => {
+      k += 1;
+      const t = k / hops;
+      setSelected(Math.round(from + (target - from) * t));
+      if (k >= hops) {
+        spinTimer.current = null;
+        setSpinning(false);
+        return;
+      }
+      // 70 ms between the first hops, easing out to ~330 ms before the last.
+      spinTimer.current = setTimeout(hop, 70 + 260 * t * t);
+    };
+    hop();
+  };
 
   const toggleOpen = useCallback((force) => {
     setOpen((o) => (typeof force === 'boolean' ? force : !o));
@@ -60,6 +103,7 @@ export default function CdCaseSelector({ beats }) {
     if (e.key === 'ArrowRight') { e.preventDefault(); select(selected + 1); }
     else if (e.key === 'ArrowLeft') { e.preventDefault(); select(selected - 1); }
     else if (e.key === 'Enter') { e.preventDefault(); toggleOpen(); }
+    else if (e.key === 'r' || e.key === 'R') { e.preventDefault(); randomize(); }
     else if (e.key === ' ') { e.preventDefault(); play(); }
   };
 
@@ -77,7 +121,7 @@ export default function CdCaseSelector({ beats }) {
         style={{ zIndex: 'calc(var(--z-overlay) + 1)' }}
         tabIndex={0}
         role="listbox"
-        aria-label="Beat cases. Arrow keys to browse, Enter to open, Space to play."
+        aria-label="Beat cases. Arrow keys to browse, R for random, Enter to open, Space to play."
         aria-activedescendant={`cd-case-${beat.id}`}
         onKeyDown={onKeyDown}
         onPointerDown={(e) => { swipeX.current = e.clientX; }}
@@ -123,8 +167,13 @@ export default function CdCaseSelector({ beats }) {
           <button className={`ab-btn ${isThisPlaying ? 'ab-btn-active' : ''}`} onClick={play}>
             {isThisPlaying ? 'Pause' : 'Play'}
           </button>
-          <button className="ab-btn" onClick={() => toggleOpen()}>
-            {open ? 'Close case' : 'Open case'}
+          <button
+            className={`ab-btn ${spinning ? 'ab-btn-active' : ''}`}
+            onClick={randomize}
+            disabled={beats.length < 2}
+            aria-label="Pick a random beat"
+          >
+            ⤮ Random
           </button>
           <button className="ab-btn ab-btn-solid" onClick={() => openLicenseModal(beat)}>
             From ${BASE_PRICE.toFixed(2)}
