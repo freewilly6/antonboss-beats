@@ -1,71 +1,82 @@
-import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3';
-import { supabaseAdmin } from '../../lib/supabaseAdmin';
+// pages/api/delete-beat.js
+//
+// Admin only. Deletes a beat and its files from both buckets — but refuses
+// if anyone has bought it, because their downloads are signed against these
+// very files and deleting them would take away something they paid for.
 
-const r2 = new S3Client({
-  region: 'auto',
-  endpoint: process.env.R2_ENDPOINT,
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-  },
-});
+import { supabaseAdmin } from '../../lib/supabaseAdmin';
+import { requireAdmin } from '../../lib/serverAuth';
+import { PUBLIC_BUCKET, PRIVATE_BUCKET, keyFromR2Url, deleteQuietly } from '../../lib/r2';
+
+const parseItems = (raw) => {
+  if (Array.isArray(raw)) return raw;
+  try {
+    const v = JSON.parse(raw || '[]');
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+};
+
+/** How many purchases include beat `id`. Paged: the API caps rows per request. */
+async function timesBought(id) {
+  let count = 0;
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabaseAdmin.from('purchases').select('beats').order('created_at').range(from, from + 999);
+    if (error) throw error;
+    count += data.filter((p) => parseItems(p.beats).some((i) => Number(i?.id ?? i?.beatId) === id)).length;
+    if (data.length < 1000) return count;
+  }
+}
 
 export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', 'POST');
+    return res.status(405).json({ error: 'Method Not Allowed' });
+  }
+  if (!(await requireAdmin(req, res))) return;
+
+  const id = Number(req.body?.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Missing beat ID' });
+
   try {
-    if (req.method !== 'POST') {
-      return res.status(405).json({ error: 'Method Not Allowed' });
+    // Checked in code rather than with a jsonb filter: older rows store the
+    // cart as a JSON string, and ids as strings or as beatId.
+    const count = await timesBought(id);
+    if (count > 0) {
+      return res.status(409).json({
+        error: `This beat has been bought ${count} time${count === 1 ? '' : 's'}; deleting it would break those buyers' downloads.`,
+      });
     }
 
-    // Confirm body was parsed properly
-    const body = req.body;
-    console.log('🟢 Received delete request body:', body);
+    // Files are looked up here, never taken from the client.
+    const [{ data: beat, error: bErr }, { data: assets }] = await Promise.all([
+      supabaseAdmin.from('BeatFiles').select('audiourl, cover, wav, stems').eq('id', id).single(),
+      supabaseAdmin.from('beat_assets').select('mp3_key, wav_key, stems_key').eq('beat_id', id).maybeSingle(),
+    ]);
+    if (bErr || !beat) return res.status(404).json({ error: 'Beat not found' });
 
-    if (!body || typeof body !== 'object') {
-      console.error('❌ Invalid JSON body:', body);
-      return res.status(400).json({ error: 'Invalid request body' });
-    }
+    const { error: dErr } = await supabaseAdmin.from('BeatFiles').delete().eq('id', id); // cascades beat_assets
+    if (dErr) throw dErr;
 
-    const { id, userId, audioKey, wavKey, stemsKey } = body;
-
-    if (!id || !userId) {
-      console.error('❌ Missing required fields: id or userId');
-      return res.status(400).json({ error: 'Missing beat ID or user ID' });
-    }
-
-    console.log(`🔄 Deleting beat ${id} for user ${userId}`);
-
-    // Delete from Supabase
-    const { error: dbError } = await supabaseAdmin
-      .from('BeatFiles')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', userId);
-
-    if (dbError) {
-      console.error('❌ Supabase delete error:', dbError.message);
-      return res.status(500).json({ error: dbError.message });
-    }
-
-    // Delete associated R2 objects
-    const keys = [audioKey, wavKey, stemsKey].filter(k => typeof k === 'string' && k.trim());
-    console.log('🗑️ Deleting from R2:', keys);
-
-    for (const key of keys) {
-      try {
-        await r2.send(new DeleteObjectCommand({
-          Bucket: process.env.R2_BUCKET,
-          Key: key,
-        }));
-        console.log(`✅ Deleted R2 object: ${key}`);
-      } catch (err) {
-        console.warn(`⚠️ Failed to delete R2 object "${key}":`, err.message);
-      }
-    }
+    const previewKey = keyFromR2Url(beat.audiourl);
+    const coverKey = keyFromR2Url(beat.cover);
+    await Promise.all([
+      deleteQuietly(PUBLIC_BUCKET, previewKey),
+      deleteQuietly(PUBLIC_BUCKET, coverKey),
+      // The pre-split tagged MP3 still sits in the private bucket at its old key.
+      deleteQuietly(PRIVATE_BUCKET, previewKey),
+      deleteQuietly(PRIVATE_BUCKET, assets?.mp3_key),
+      deleteQuietly(PRIVATE_BUCKET, assets?.wav_key),
+      deleteQuietly(PRIVATE_BUCKET, assets?.stems_key),
+      // Legacy URL columns, until migration part B clears them.
+      deleteQuietly(PRIVATE_BUCKET, keyFromR2Url(beat.wav)),
+      deleteQuietly(PRIVATE_BUCKET, keyFromR2Url(beat.stems)),
+    ]);
 
     return res.status(200).json({ success: true });
-
   } catch (err) {
-    console.error('🔥 Unhandled server error:', err);
+    console.error('[delete-beat] failed:', err);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
 }

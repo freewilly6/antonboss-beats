@@ -34,6 +34,10 @@ export default function PillNav({ onOpenCart }) {
     return () => io.disconnect();
   }, []);
 
+  // The playbar carries its own controls; with both up, the bottom of a phone
+  // screen is all chrome. The nav steps aside while a beat is loaded.
+  if (currentBeat) return null;
+
   const jump = (id) => {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     history.replaceState(null, '', `#${id}`);
@@ -41,11 +45,9 @@ export default function PillNav({ onOpenCart }) {
 
   return (
     <nav
-      className="fixed left-1/2 -translate-x-1/2 transition-[bottom] duration-300"
-      // BeatPlayer is fixed to bottom-0 and mounts as soon as a beat plays.
-      // Ride above it rather than getting buried under it. z-chrome puts both
-      // above the VHS overlay so they stay readable.
-      style={{ bottom: currentBeat ? '7rem' : '1.5rem', zIndex: 'var(--z-chrome)' }}
+      className="fixed bottom-6 left-1/2 -translate-x-1/2"
+      // z-chrome keeps it above the VHS overlay so it stays readable.
+      style={{ zIndex: 'var(--z-chrome)' }}
       aria-label="Section navigation"
     >
       <div className="pill-nav">

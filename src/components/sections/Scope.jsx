@@ -41,8 +41,9 @@ export default function Scope() {
     text.activeIndex = (text.activeIndex + 1) % text.lines.length;
   }, []);
 
+  // The tube is a screen, so it stays dark in light mode too (.theme-dark).
   return (
-    <section id="scope" className="relative min-h-screen w-full overflow-hidden">
+    <section id="scope" className="theme-dark relative min-h-screen w-full overflow-hidden">
       <VisualizerCanvas
         configRef={configRef}
         onBeat={handleBeat}
@@ -51,15 +52,9 @@ export default function Scope() {
 
       {/* Everything below floats over the tube. */}
       <div className="pointer-events-none relative z-10 flex min-h-screen flex-col justify-between p-6 sm:p-10">
-        <header className="pointer-events-auto flex items-start justify-between gap-6">
-          <div>
-            <h1 className="ab-label" style={{ color: 'var(--fg-70)' }}>
-              Anton Boss
-            </h1>
-            <p className="ab-label-dim mt-3 max-w-xs leading-relaxed">
-              Type a lyric. Drop a font. Watch it break.
-            </p>
-          </div>
+        {/* Controls sit top-left: the floating Menu button owns the top-right. */}
+        <header className="pointer-events-auto flex items-start gap-6">
+          <h1 className="sr-only">Anton Boss</h1>
 
           <div className="flex gap-2">
             <button

@@ -1,12 +1,8 @@
 // src/context/BeatQueueContext.jsx
 import { createContext, useContext, useState, useEffect, useMemo } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { loadSupabase } from '@/lib/supabaseLazy';
 
 const BeatQueueContext = createContext();
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
 
 export function BeatQueueProvider({ children }) {
   const [queue, setQueue] = useState([]);
@@ -16,9 +12,14 @@ export function BeatQueueProvider({ children }) {
     let cancelled = false;
 
     const fetchBeats = async () => {
+      // Loaded here, not imported up top: see lib/supabaseLazy.js.
+      const supabase = await loadSupabase();
+      if (cancelled) return;
+      // Public columns only. `licenses` carried each tier's file location, so
+      // every visitor's browser used to receive the paid files' URLs.
       const { data, error } = await supabase
         .from('BeatFiles')
-        .select('id,name,artist,audiourl,cover,genre,key,bpm,licenses')
+        .select('id,name,artist,audiourl,cover,genre,mood,key,bpm')
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -37,9 +38,11 @@ export function BeatQueueProvider({ children }) {
         cover:    b.cover     || '/images/beats/default-cover.png',
         artist:   b.artist    || 'Anton Boss',
         genre:    b.genre     || 'Unknown',
+        // Without this the shelf's mood filter and the list view's mood
+        // column had nothing to work with.
+        mood:     b.mood      || '',
         key:      b.key,
         bpm:      b.bpm,
-        licenses: b.licenses  || [],
       }));
       if (cancelled) return;
       setQueue(normalizedBeats);

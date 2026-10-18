@@ -10,7 +10,7 @@ import Reveal from './Reveal';
 
 const LINKS = [
   { href: '/license', label: 'Licensing' },
-  { href: '/downloads', label: 'Downloads' },
+  { href: '/account?tab=library', label: 'Downloads' },
   { href: '/signin', label: 'Sign in' },
 ];
 

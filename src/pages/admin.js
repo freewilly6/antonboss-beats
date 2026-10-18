@@ -1,538 +1,601 @@
 // pages/admin.js
+//
+// The store's back office: add beats, edit their details, swap their files,
+// delete them. Files upload straight from the browser to R2 via presigned
+// links (/api/admin/upload-url): the tagged preview and cover to the public
+// bucket, paid files (untagged MP3, WAV, stems) to the private one. This page
+// only ever learns whether a beat HAS each paid file, never where it is. middleware.ts keeps non-admins off this page, and every API
+// route it calls checks the admin session again (lib/serverAuth.js), since
+// those routes are reachable without the page.
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import Head from 'next/head';
+import { useRouter } from 'next/router';
 import { useDropzone } from 'react-dropzone';
 import Layout from '../components/Layout';
 import { supabase } from '../lib/supabaseClient';
+import { isAdminEmail } from '../lib/admin';
+
+const PAGE_SIZE = 10;
+const TEXT_FIELDS = ['name', 'artist', 'genre', 'mood', 'key', 'bpm'];
+const EMPTY_FORM = { name: '', artist: '', genre: '', mood: '', key: '', bpm: '' };
+const LABELS = { name: 'Name', artist: 'Artist', genre: 'Genre', mood: 'Mood', key: 'Key', bpm: 'BPM' };
+
+const SORTS = [
+  ['created_at-desc', 'Newest first'],
+  ['created_at-asc', 'Oldest first'],
+  ['name-asc', 'Name A→Z'],
+  ['name-desc', 'Name Z→A'],
+  ['artist-asc', 'Artist A→Z'],
+  ['artist-desc', 'Artist Z→A'],
+  ['bpm-asc', 'BPM low→high'],
+  ['bpm-desc', 'BPM high→low'],
+];
+
+// react-dropzone 14 takes accept as { mime: [extensions] }; a bare MIME
+// string is ignored, which let any file through the MP3 and cover drops.
+const ACCEPT = {
+  preview: { 'audio/mpeg': ['.mp3'] },
+  mp3: { 'audio/mpeg': ['.mp3'] },
+  wav: { 'audio/wav': ['.wav'], 'audio/x-wav': ['.wav'], 'audio/wave': ['.wav'] },
+  stems: { 'application/zip': ['.zip'], 'application/x-zip-compressed': ['.zip'] },
+  cover: { 'image/*': [] },
+};
+
+const bpmNumber = (v) => parseInt(String(v ?? '').replace(/\D/g, ''), 10) || 0;
+
+/** fetch() with the admin's session token attached. */
+async function authedFetch(url, options = {}) {
+  const { data } = await supabase.auth.getSession();
+  const token = data?.session?.access_token;
+  const res = await fetch(url, {
+    ...options,
+    headers: { ...(options.headers || {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error || `Request failed (${res.status})`);
+  return json;
+}
+
+/**
+ * @param {{ label: string, hint: string, accept: Record<string, string[]>, file: File | null,
+ *           onFile: (f: File) => void, error?: string, preview?: string | null }} props
+ */
+function Dropzone({ label, hint, accept, file, onFile, error, preview }) {
+  const onDrop = useCallback((files) => files[0] && onFile(files[0]), [onFile]);
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop, accept, multiple: false });
+  return (
+    <div>
+      <p className="ab-label-dim mb-2">{label}</p>
+      <div
+        {...getRootProps()}
+        className={`flex min-h-24 cursor-pointer flex-col items-center justify-center gap-2 border border-dashed p-4 text-center transition-colors ${
+          isDragActive ? 'border-[var(--accent)]' : 'border-[var(--fg-20)] hover:border-[var(--fg-50)]'
+        }`}
+      >
+        <input {...getInputProps()} />
+        {preview ? (
+          <img src={preview} alt="" className="h-20 w-20 object-cover" />
+        ) : (
+          <span className="ab-meta">{file ? file.name : hint}</span>
+        )}
+      </div>
+      {error && <p className="ab-meta mt-1 text-[var(--accent)]">{error}</p>}
+    </div>
+  );
+}
 
 export default function AdminPage() {
-  // 🔐 Auth & data
-  const [user, setUser]                 = useState(null);
-  const [accessDenied, setAccessDenied] = useState(false);
-  const [beatFiles, setBeatFiles]       = useState([]);
-  const [loadingBeats, setLoadingBeats] = useState(true);
-  const [message, setMessage]           = useState('');
+  const router = useRouter();
 
-  // ➕ “Add New Beat” modal & form
+  // Auth & data
+  const [user, setUser] = useState(null);
+  const [accessDenied, setAccessDenied] = useState(false);
+  const [beatFiles, setBeatFiles] = useState([]);
+  const [initialLoad, setInitialLoad] = useState(true);
+  const [busyId, setBusyId] = useState(null); // row with a request in flight
+  const [notice, setNotice] = useState(null); // { ok, text }
+
+  // Add beat
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newForm, setNewForm] = useState({
-    name: '', artist: '', genre: '', mood: '', key: '', bpm: ''
-  });
-  const [audioFile, setAudioFile] = useState(null);
-  const [wavFile, setWavFile]     = useState(null);
+  const [newForm, setNewForm] = useState(EMPTY_FORM);
+  const [previewFile, setPreviewFile] = useState(null); // tagged MP3 (public)
+  const [mp3File, setMp3File] = useState(null); // untagged MP3 (private)
+  const [wavFile, setWavFile] = useState(null);
   const [stemsFile, setStemsFile] = useState(null);
   const [coverFile, setCoverFile] = useState(null);
-  const [formErrors, setFormErrors] = useState({});
+  const [formErrors, setFormErrors] = useState(/** @type {Record<string, string>} */ ({}));
   const [uploading, setUploading] = useState(false);
 
-  // ✏️ Inline edit state & form
+  // Inline edit
   const [editingId, setEditingId] = useState(null);
-  const [editForm, setEditForm]   = useState({});
-  
-  // 🔍 Search + sort + pagination
+  const [editForm, setEditForm] = useState(EMPTY_FORM);
+
+  // Search, sort, pagination
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortOption, setSortOption]   = useState('created_at-desc');
+  const [onlyMissingMp3, setOnlyMissingMp3] = useState(false);
+  const [sortOption, setSortOption] = useState('created_at-desc');
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 10;
 
-  // 📂 Drag-and-drop hooks for Add
-  const onDropAudio = useCallback(files => setAudioFile(files[0]), []);
-  const { getRootProps: getAudioRoot, getInputProps: getAudioInput } = useDropzone({
-    onDrop: onDropAudio, accept: 'audio/mpeg', multiple: false,
-  });
+  const say = (ok, text) => setNotice({ ok, text });
 
-  const onDropWav = useCallback(files => setWavFile(files[0]), []);
-  const { getRootProps: getWavRoot, getInputProps: getWavInput } = useDropzone({
-    onDrop: onDropWav,
-    multiple: false,
-    accept: {
-      'audio/wav':      ['.wav'],
-      'audio/x-wav':    ['.wav'],
-      'audio/wave':     ['.wav'],
-    },
-  });
+  useEffect(() => {
+    if (!notice?.ok) return;
+    const t = setTimeout(() => setNotice(null), 4000);
+    return () => clearTimeout(t);
+  }, [notice]);
 
-  const onDropStems = useCallback(files => setStemsFile(files[0]), []);
-  const { getRootProps: getStemsRoot, getInputProps: getStemsInput } = useDropzone({
-    onDrop: onDropStems,
-    multiple: false,
-    accept: {
-      'application/zip':            ['.zip'],
-      'application/x-zip-compressed':['.zip'],
-    },
-  });
+  // One object URL per chosen cover, revoked when it changes. Creating it
+  // inline in render leaked a new blob URL on every keystroke in the form.
+  const coverPreview = useMemo(() => (coverFile ? URL.createObjectURL(coverFile) : null), [coverFile]);
+  useEffect(() => () => coverPreview && URL.revokeObjectURL(coverPreview), [coverPreview]);
 
-  const onDropCover = useCallback(files => setCoverFile(files[0]), []);
-  const { getRootProps: getCoverRoot, getInputProps: getCoverInput } = useDropzone({
-    onDrop: onDropCover, accept: 'image/*', multiple: false,
-  });
-
-  // 🔄 Fetch beats from Supabase
-  const fetchBeatFiles = async () => {
-    setLoadingBeats(true);
-    const { data, error } = await supabase
-      .from('BeatFiles')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (error) setMessage(`Error loading beats: ${error.message}`);
-    else setBeatFiles(data);
-    setLoadingBeats(false);
-  };
+  const fetchBeatFiles = useCallback(async () => {
+    try {
+      const { beats } = await authedFetch('/api/admin/beats');
+      setBeatFiles(beats || []);
+    } catch (err) {
+      say(false, `Couldn’t load beats: ${err.message}`);
+    }
+    setInitialLoad(false);
+  }, []);
 
   useEffect(() => {
     (async () => {
-      const { data, error } = await supabase.auth.getUser();
-      const email = data?.user?.email?.toLowerCase() || '';
-      if (error || email !== 'antonbosspd@gmail.com') {
-        setAccessDenied(true);
-      } else {
-        setUser(data.user);
-        fetchBeatFiles();
+      const { data } = await supabase.auth.getSession();
+      const sessionUser = data?.session?.user;
+      if (!sessionUser) {
+        router.replace('/signin?redirectTo=/admin');
+        return;
       }
+      if (!isAdminEmail(sessionUser.email)) {
+        setAccessDenied(true);
+        return;
+      }
+      setUser(sessionUser);
+      fetchBeatFiles();
     })();
-  }, []);
+  }, [router, fetchBeatFiles]);
 
-  // 🛠 Search + sort logic
+  // Search + sort. Null-safe: a beat saved without an artist used to crash
+  // the whole page on the first keystroke in the search box.
   const filteredSorted = useMemo(() => {
-    let arr = beatFiles.filter(b =>
-      b.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      b.artist.toLowerCase().includes(searchQuery.toLowerCase())
+    const q = searchQuery.trim().toLowerCase();
+    const arr = beatFiles.filter(
+      (b) =>
+        (!onlyMissingMp3 || !b.has?.mp3) &&
+        (!q || [b.name, b.artist, b.genre, b.mood].some((v) => String(v ?? '').toLowerCase().includes(q)))
     );
     const [field, dir] = sortOption.split('-');
-    arr.sort((a, b) => {
-      let va = a[field] || '', vb = b[field] || '';
-      if (field === 'bpm') {
-        va = parseInt(va.replace(/\D/g,'')) || 0;
-        vb = parseInt(vb.replace(/\D/g,'')) || 0;
-      }
-      if (va < vb) return dir==='asc' ? -1 : 1;
-      if (va > vb) return dir==='asc' ? 1  : -1;
-      return 0;
+    const sign = dir === 'asc' ? 1 : -1;
+    return arr.sort((a, b) => {
+      if (field === 'bpm') return (bpmNumber(a.bpm) - bpmNumber(b.bpm)) * sign;
+      return String(a[field] ?? '').localeCompare(String(b[field] ?? '')) * sign;
     });
-    return arr;
-  }, [beatFiles, searchQuery, sortOption]);
+  }, [beatFiles, searchQuery, sortOption, onlyMissingMp3]);
 
-  const pageCount = Math.ceil(filteredSorted.length / pageSize);
-  const paginated = useMemo(() =>
-    filteredSorted.slice((currentPage - 1) * pageSize, currentPage * pageSize),
-  [filteredSorted, currentPage]);
+  const missingMp3Count = beatFiles.filter((b) => !b.has?.mp3).length;
 
-  // ☁️ R2 upload helper
-  const uploadToR2 = async (file, folder = '') => {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('folder', folder);
-    const res = await fetch('/api/upload-beats', { method: 'POST', body: formData });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error);
-    return json.url;
+  const pageCount = Math.max(1, Math.ceil(filteredSorted.length / PAGE_SIZE));
+  const page = Math.min(currentPage, pageCount);
+  const paginated = filteredSorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  /**
+   * Upload one file straight to R2. The server picks the bucket and key from
+   * `kind`; we get back the key, plus the public URL for public kinds.
+   */
+  const uploadFile = async (kind, file) => {
+    const { uploadUrl, contentType, key, publicUrl } = await authedFetch('/api/admin/upload-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind, filename: file.name, contentType: file.type }),
+    });
+    const put = await fetch(uploadUrl, { method: 'PUT', headers: { 'Content-Type': contentType }, body: file });
+    if (!put.ok) throw new Error(`Upload of ${file.name} failed (${put.status}) — check the bucket's CORS rule`);
+    return { key, publicUrl };
   };
 
-  // ➕ Add New Beat handler
+  const saveBeat = (method, body) =>
+    authedFetch('/api/admin/beats', {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+  const resetAddForm = () => {
+    setNewForm(EMPTY_FORM);
+    setPreviewFile(null);
+    setMp3File(null);
+    setWavFile(null);
+    setStemsFile(null);
+    setCoverFile(null);
+    setFormErrors({});
+  };
+
   const handleAddBeat = async () => {
+    /** @type {Record<string, string>} */
     const errs = {};
-    if (!newForm.name)  errs.name  = 'Name required';
-    if (!audioFile)     errs.audio = 'MP3 required';
-    if (!coverFile)     errs.cover = 'Cover required';
+    if (!newForm.name.trim()) errs.name = 'Name required';
+    if (!previewFile) errs.preview = 'Tagged preview required';
+    if (!coverFile) errs.cover = 'Cover required';
     setFormErrors(errs);
     if (Object.keys(errs).length) return;
 
     setUploading(true);
     try {
-      const [audioUrl, wavUrl, stemsUrl] = await Promise.all([
-        uploadToR2(audioFile, ''), 
-        wavFile   ? uploadToR2(wavFile,   'wav')   : null,
-        stemsFile ? uploadToR2(stemsFile, 'stems') : null,
+      const [preview, cover, mp3, wav, stems] = await Promise.all([
+        uploadFile('preview', previewFile),
+        uploadFile('cover', coverFile),
+        mp3File ? uploadFile('mp3', mp3File) : null,
+        wavFile ? uploadFile('wav', wavFile) : null,
+        stemsFile ? uploadFile('stems', stemsFile) : null,
       ]);
 
-      // cover → Supabase storage
-      const coverPath = `${Date.now()}-${coverFile.name.replace(/[^a-z0-9.\-_]/gi,'_')}`;
-      const { error: covErr } = await supabase
-        .storage.from('covers')
-        .upload(coverPath, coverFile, { upsert: true, contentType: coverFile.type });
-      if (covErr) throw covErr;
-      const { data: { publicUrl: coverUrl } } = supabase
-        .storage.from('covers').getPublicUrl(coverPath);
+      await saveBeat('POST', {
+        ...newForm,
+        previewUrl: preview.publicUrl,
+        coverUrl: cover.publicUrl,
+        mp3Key: mp3?.key,
+        wavKey: wav?.key,
+        stemsKey: stems?.key,
+      });
 
-      // insert
-      const { error: dbErr } = await supabase
-        .from('BeatFiles')
-        .insert([{
-          ...newForm,
-          bpm:      newForm.bpm,
-          audiourl: audioUrl,
-          wav:      wavUrl,
-          stems:    stemsUrl,
-          cover:    coverUrl,
-          user_id:  user.id,
-          licenses: [
-            { name:'Basic License',     price:24.99,  file_path:audioUrl },
-            { name:'Premium License',  price:34.99,  file_path:wavUrl },
-            { name:'Premium-Plus License',   price:49.99,  file_path:stemsUrl },
-            { name:'Unlimited License', price:74.99, file_path:stemsUrl },
-          ],
-        }]);
-      if (dbErr) throw dbErr;
-
-      setMessage('✅ Beat added');
+      say(true, `Added “${newForm.name}”`);
       setShowAddModal(false);
-      setNewForm({ name:'',artist:'',genre:'',mood:'',key:'',bpm:'' });
-      setAudioFile(null); setWavFile(null);
-      setStemsFile(null); setCoverFile(null);
+      resetAddForm();
       fetchBeatFiles();
     } catch (err) {
-      setMessage(`❌ ${err.message}`);
+      say(false, `Couldn’t add the beat: ${err.message}`);
     } finally {
       setUploading(false);
     }
   };
 
-  // ✏️ Begin editing a beat
   const handleEdit = (beat) => {
     setEditingId(beat.id);
-    setEditForm({
-      name: beat.name || '',
-      artist: beat.artist || '',
-      genre: beat.genre || '',
-      mood: beat.mood || '',
-      key: beat.key || '',
-      bpm: beat.bpm || '',
-    });
+    setEditForm(/** @type {typeof EMPTY_FORM} */ (Object.fromEntries(TEXT_FIELDS.map((f) => [f, beat[f] ?? '']))));
   };
 
-  // ✏️ Handle input changes in edit form
-  const handleEditChange = (field, val) => {
-    setEditForm(prev => ({ ...prev, [field]: val }));
-  };
-
-  // ✏️ Save edits
   const handleSaveEdit = async () => {
-    if (!editingId || !user?.id) {
-      setMessage('❌ Invalid edit session');
-      return;
-    }
-    const updates = { ...editForm };
+    const id = editingId;
+    setBusyId(id);
     try {
-      const { error } = await supabase
-        .from('BeatFiles')
-        .update(updates)
-        .eq('id', editingId)
-        .eq('user_id', user.id);
-      if (error) throw error;
-      setMessage('✅ Beat updated');
+      await saveBeat('PATCH', { id, ...editForm });
+      say(true, 'Saved');
       setEditingId(null);
       fetchBeatFiles();
     } catch (err) {
-      setMessage(`❌ Save failed: ${err.message}`);
-    }
-  };
-
-  // ✏️ Replace file (audio, wav, stems, cover) during edit
-  const handleReplaceFile = async (file, type) => {
-    if (!file || !editingId || !user?.id) {
-      setMessage('❌ Invalid file or session');
-      return;
-    }
-    // extension/MIME checks
-    if (type === 'stems') {
-      const ok = file.name.toLowerCase().endsWith('.zip')
-              || file.type === 'application/zip'
-              || file.type === 'application/x-zip-compressed';
-      if (!ok) return setMessage('❌ Stems must be ZIP');
-    }
-    if (type === 'cover') {
-      if (!file.type.startsWith('image/'))
-        return setMessage('❌ Cover must be image');
-    }
-    try {
-      let url;
-      if (type === 'cover') {
-        const path = `${editingId}-${Date.now()}-${file.name.replace(/[^a-z0-9.\-_]/gi,'_')}`;
-        const { error: uErr } = await supabase
-          .storage.from('covers')
-          .upload(path, file, { upsert: true, contentType: file.type });
-        if (uErr) throw uErr;
-        const { data: { publicUrl } } = supabase.storage.from('covers').getPublicUrl(path);
-        url = publicUrl;
-      } else {
-        url = await uploadToR2(
-          file,
-          type==='wav'   ? 'wav' :
-          type==='stems' ? 'stems' : ''
-        );
-      }
-      const column = (
-        type==='audio' ? 'audiourl' :
-        type==='wav'   ? 'wav'      :
-        type==='stems' ? 'stems'    :
-        type==='cover' ? 'cover'    :
-        null
-      );
-      if (!column) throw new Error('Unknown type');
-      const { error } = await supabase
-        .from('BeatFiles')
-        .update({ [column]: url })
-        .eq('id', editingId)
-        .eq('user_id', user.id);
-      if (error) throw error;
-      setMessage(`✅ ${type} updated`);
-      fetchBeatFiles();
-    } catch (err) {
-      setMessage(`❌ Upload failed: ${err.message}`);
-    }
-  };
-
-  // 🗑 Delete handler
-  const handleDelete = async (beat) => {
-    if (!confirm(`Delete "${beat.name}"?`)) return;
-    setLoadingBeats(true);
-    const audioKey = beat.audiourl?.split('/').pop();
-    const wavKey   = beat.wav?.split('/').pop();
-    const stemsKey = beat.stems?.split('/').pop();
-    try {
-      const res = await fetch('/api/delete-beat', {
-        method: 'POST',
-        headers: { 'Content-Type':'application/json' },
-        body: JSON.stringify({ id:beat.id, userId:user.id, audioKey, wavKey, stemsKey }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error||'Unknown');
-      setMessage('🗑️ Beat deleted');
-      fetchBeatFiles();
-    } catch (err) {
-      setMessage(`❌ Delete failed: ${err.message}`);
+      say(false, `Save failed: ${err.message}`);
     } finally {
-      setLoadingBeats(false);
+      setBusyId(null);
+    }
+  };
+
+  // kind → [what the PATCH body calls it, use the public URL?, label]
+  const REPLACE = {
+    preview: ['previewUrl', true, 'Tagged preview'],
+    cover: ['coverUrl', true, 'Cover'],
+    mp3: ['mp3Key', false, 'Untagged MP3'],
+    wav: ['wavKey', false, 'WAV'],
+    stems: ['stemsKey', false, 'Stems'],
+  };
+
+  const handleReplaceFile = async (file, kind) => {
+    const id = editingId;
+    if (!file || !id) return;
+    const [field, isPublic, label] = REPLACE[kind];
+    setBusyId(id);
+    try {
+      const { key, publicUrl } = await uploadFile(kind, file);
+      await saveBeat('PATCH', { id, [field]: isPublic ? publicUrl : key });
+      say(true, `${label} ${kind === 'preview' || kind === 'cover' ? 'replaced' : 'uploaded'}`);
+      fetchBeatFiles();
+    } catch (err) {
+      say(false, `Upload failed: ${err.message}`);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleDelete = async (beat) => {
+    if (!confirm(`Delete “${beat.name}”? This also removes its files.`)) return;
+    setBusyId(beat.id);
+    try {
+      await authedFetch('/api/delete-beat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: beat.id }),
+      });
+      say(true, `Deleted “${beat.name}”`);
+      fetchBeatFiles();
+    } catch (err) {
+      say(false, `Delete failed: ${err.message}`);
+    } finally {
+      setBusyId(null);
     }
   };
 
   if (accessDenied) {
-    return <Layout><p className="text-center mt-20 text-xl">🚫 Access Denied</p></Layout>;
+    return (
+      <Layout>
+        <div className="py-32 text-center">
+          <p className="ab-label mb-4">Admin</p>
+          <p className="ab-display">This page is for the store owner.</p>
+        </div>
+      </Layout>
+    );
   }
-  if (!user || loadingBeats) {
-    return <Layout><p className="text-center mt-20 text-xl">🔄 Loading…</p></Layout>;
+  if (!user || initialLoad) {
+    return (
+      <Layout>
+        <p className="ab-label-dim py-32 text-center">Loading…</p>
+      </Layout>
+    );
   }
 
   return (
     <Layout>
-      <div className="max-w-7xl mx-auto mt-10 p-6 bg-white rounded shadow">
-        <h1 className="text-2xl font-bold mb-4">Manage BeatFiles</h1>
-        {message && <p className="mb-4 text-blue-600 text-sm">{message}</p>}
+      <Head>
+        <title>Admin — Anton Boss</title>
+      </Head>
+
+      <div className="mx-auto max-w-5xl py-12">
+        <div className="flex flex-wrap items-end justify-between gap-6">
+          <div>
+            <p className="ab-label mb-3">Admin</p>
+            <h1 className="ab-display">
+              {beatFiles.length} beat{beatFiles.length === 1 ? '' : 's'}
+            </h1>
+          </div>
+          <button onClick={() => setShowAddModal(true)} className="ab-btn ab-btn-solid">
+            + Add beat
+          </button>
+        </div>
 
         {/* Toolbar */}
-        <div className="flex justify-between items-center mb-4">
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="bg-blue-600 text-white px-4 py-2 rounded"
-          >➕ Add New Beat</button>
-          <div className="flex space-x-2">
+        <div className="mt-10 flex flex-col gap-3 sm:flex-row">
+          {/* Sized wrappers: .ab-field sets width: 100% outside Tailwind's
+              layers, so it overrides width utilities on the field itself. */}
+          <div className="min-w-0 flex-1">
             <input
-              type="text"
-              placeholder="Search name or artist…"
+              type="search"
+              placeholder="Search name, artist, genre, mood…"
               value={searchQuery}
-              onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-              className="border p-2 rounded"
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="ab-field"
+              aria-label="Search beats"
             />
+          </div>
+          <div className="sm:w-52 sm:flex-none">
             <select
               value={sortOption}
-              onChange={e => setSortOption(e.target.value)}
-              className="border p-2 rounded"
+              onChange={(e) => setSortOption(e.target.value)}
+              className="ab-field"
+              aria-label="Sort"
             >
-              <option value="created_at-desc">Date (New→Old)</option>
-              <option value="created_at-asc">Date (Old→New)</option>
-              <option value="name-asc">Name (A→Z)</option>
-              <option value="name-desc">Name (Z→A)</option>
-              <option value="artist-asc">Artist (A→Z)</option>
-              <option value="artist-desc">Artist (Z→A)</option>
-              <option value="bpm-asc">BPM (Low→High)</option>
-              <option value="bpm-desc">BPM (High→Low)</option>
+              {SORTS.map(([v, l]) => (
+                <option key={v} value={v} className="bg-[var(--bg)]">
+                  {l}
+                </option>
+              ))}
             </select>
           </div>
+          {/* The to-do list for the untagged MP3 slot: until one is uploaded,
+              Basic buyers of that beat receive the tagged preview. */}
+          <button
+            onClick={() => {
+              setOnlyMissingMp3((v) => !v);
+              setCurrentPage(1);
+            }}
+            aria-pressed={onlyMissingMp3}
+            className={`ab-btn whitespace-nowrap ${onlyMissingMp3 ? 'ab-btn-active' : ''}`}
+            disabled={!missingMp3Count && !onlyMissingMp3}
+          >
+            No untagged MP3 ({missingMp3Count})
+          </button>
         </div>
 
-        {/* Table */}
-        <table className="w-full table-auto border-collapse">
-          <thead>
-            <tr className="bg-gray-100">
-              <th className="border px-2 py-2">Cover</th>
-              <th className="border px-2 py-2">Audio</th>
-              <th className="border px-2 py-2">Info</th>
-              <th className="border px-2 py-2">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {paginated.map(beat => (
-              <tr key={beat.id}>
-                <td className="border p-2">
-                  <img src={beat.cover} className="w-16 h-16 object-cover rounded" />
-                </td>
-                <td className="border p-2">
-                  {beat.audiourl
-                    ? <audio controls src={beat.audiourl} className="w-40" />
-                    : <span className="text-gray-500 italic">No preview</span>}
-                </td>
-                <td className="border p-2">
-                  {editingId === beat.id ? (
-                    <>
-                      {['name','artist','genre','mood','key'].map(f => (
-                        <input
-                          key={f}
-                          type="text"
-                          className="border w-full my-1 p-1 rounded"
-                          placeholder={f.charAt(0).toUpperCase()+f.slice(1)}
-                          value={editForm[f]}
-                          onChange={e => handleEditChange(f, e.target.value)}
-                        />
-                      ))}
-                      <input
-                        type="text"
-                        className="border w-full my-1 p-1 rounded"
-                        placeholder="BPM (e.g. 86 bpm)"
-                        value={editForm.bpm}
-                        onChange={e => handleEditChange('bpm', e.target.value)}
-                      />
-                      <div className="flex flex-wrap gap-2 mt-2 text-sm">
-                        <button
-                          onClick={() => document.getElementById(`audio-upload-${beat.id}`).click()}
-                          className="text-blue-500"
-                        >🎵 Replace MP3</button>
-                        <button
-                          onClick={() => document.getElementById(`wav-upload-${beat.id}`).click()}
-                          className="text-purple-500"
-                        >🔊 Replace WAV</button>
-                        <button
-                          onClick={() => document.getElementById(`stems-upload-${beat.id}`).click()}
-                          className="text-orange-500"
-                        >📦 Replace STEMS</button>
-                        <button
-                          onClick={() => document.getElementById(`cover-upload-${beat.id}`).click()}
-                          className="text-green-500"
-                        >🖼️ Replace Cover</button>
+        {/* Beats */}
+        {paginated.length === 0 ? (
+          <p className="ab-label-dim py-20 text-center">
+            {beatFiles.length ? 'No beats match that search' : 'No beats yet — add the first one'}
+          </p>
+        ) : (
+          <ul className="mt-8 divide-y divide-[var(--fg-10)] border-y border-[var(--fg-10)]">
+            {paginated.map((beat) => {
+              const editing = editingId === beat.id;
+              const busy = busyId === beat.id;
+              return (
+                <li key={beat.id} className={`py-5 ${busy ? 'opacity-60' : ''}`}>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <img
+                      src={beat.cover || '/images/beats/default-cover.png'}
+                      alt=""
+                      className="h-16 w-16 flex-none object-cover"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm">{beat.name || 'Untitled'}</p>
+                      <p className="ab-meta mt-1 truncate">
+                        {[beat.artist, beat.genre, beat.mood, beat.key, beat.bpm && `${bpmNumber(beat.bpm) || beat.bpm} BPM`]
+                          .filter(Boolean)
+                          .join(' · ') || '—'}
+                      </p>
+                      <p className="ab-meta mt-1">
+                        {[beat.audiourl && 'Preview', beat.has?.mp3 && 'Untagged MP3', beat.has?.wav && 'WAV', beat.has?.stems && 'Stems']
+                          .filter(Boolean)
+                          .join(' · ') || 'No files'}
+                        {!beat.has?.mp3 && (
+                          <span className="ml-2 text-[var(--accent)]" title="Basic buyers get the tagged preview until one is uploaded">
+                            · No untagged MP3
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                    {beat.audiourl && (
+                      <audio controls preload="none" src={beat.audiourl} className="h-8 w-full sm:w-56" />
+                    )}
+                    <div className="flex gap-2">
+                      {editing ? (
+                        <>
+                          <button onClick={handleSaveEdit} disabled={busy} className="ab-btn ab-btn-sm ab-btn-active">
+                            {busy ? 'Saving…' : 'Save'}
+                          </button>
+                          <button onClick={() => setEditingId(null)} className="ab-btn ab-btn-sm">
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button onClick={() => handleEdit(beat)} disabled={busy} className="ab-btn ab-btn-sm">
+                            Edit
+                          </button>
+                          <button onClick={() => handleDelete(beat)} disabled={busy} className="ab-btn ab-btn-sm">
+                            {busy ? '…' : 'Delete'}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {editing && (
+                    <div className="mt-6 border border-[var(--fg-10)] p-5">
+                      <div className="grid gap-x-6 gap-y-4 sm:grid-cols-3">
+                        {TEXT_FIELDS.map((f) => (
+                          <label key={f} className="block">
+                            <span className="ab-label-dim">{LABELS[f]}</span>
+                            <input
+                              className="ab-input mt-1"
+                              value={editForm[f]}
+                              placeholder={f === 'bpm' ? 'e.g. 86' : ''}
+                              onChange={(e) => setEditForm((prev) => ({ ...prev, [f]: e.target.value }))}
+                            />
+                          </label>
+                        ))}
                       </div>
-                      <input id={`audio-upload-${beat.id}`} type="file" hidden accept="audio/mpeg"
-                        onChange={e => handleReplaceFile(e.target.files[0], 'audio')} />
-                      <input id={`wav-upload-${beat.id}`} type="file" hidden accept=".wav"
-                        onChange={e => handleReplaceFile(e.target.files[0], 'wav')} />
-                      <input id={`stems-upload-${beat.id}`} type="file" hidden accept=".zip"
-                        onChange={e => handleReplaceFile(e.target.files[0], 'stems')} />
-                      <input id={`cover-upload-${beat.id}`} type="file" hidden accept="image/*"
-                        onChange={e => handleReplaceFile(e.target.files[0], 'cover')} />
-                    </>
-                  ) : (
-                    <>
-                      <p><strong>{beat.name}</strong> by {beat.artist}</p>
-                      <p className="text-xs">Key: {beat.key}, {beat.bpm}</p>
-                    </>
+                      <div className="mt-6 flex flex-wrap gap-2">
+                        {[
+                          ['preview', 'Replace tagged preview', '.mp3,audio/mpeg'],
+                          ['mp3', beat.has?.mp3 ? 'Replace untagged MP3' : 'Upload untagged MP3', '.mp3,audio/mpeg'],
+                          ['wav', beat.has?.wav ? 'Replace WAV' : 'Upload WAV', '.wav'],
+                          ['stems', beat.has?.stems ? 'Replace stems' : 'Upload stems', '.zip'],
+                          ['cover', 'Replace cover', 'image/*'],
+                        ].map(([type, label, accept]) => (
+                          <label key={type} className="ab-btn ab-btn-sm cursor-pointer">
+                            {label}
+                            <input
+                              type="file"
+                              hidden
+                              accept={accept}
+                              onChange={(e) => {
+                                handleReplaceFile(e.target.files[0], type);
+                                e.target.value = ''; // allow picking the same file again
+                              }}
+                            />
+                          </label>
+                        ))}
+                      </div>
+                    </div>
                   )}
-                </td>
-                <td className="border p-2 space-x-2">
-                  {editingId === beat.id ? (
-                    <>
-                      <button onClick={handleSaveEdit} className="text-green-600">💾 Save</button>
-                      <button onClick={() => setEditingId(null)} className="text-gray-500">Cancel</button>
-                    </>
-                  ) : (
-                    <>
-                      <button onClick={() => handleEdit(beat)} className="text-blue-600">✏️ Edit</button>
-                      <button onClick={() => handleDelete(beat)} className="text-red-600">🗑️ Delete</button>
-                    </>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                </li>
+              );
+            })}
+          </ul>
+        )}
 
         {/* Pagination */}
-        <div className="flex justify-between items-center mt-4">
-          <button
-            onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
-            disabled={currentPage === 1}
-            className="px-3 py-1 border rounded disabled:opacity-50"
-          >Prev</button>
-          <span>Page {currentPage} of {pageCount}</span>
-          <button
-            onClick={() => setCurrentPage(p => Math.min(p + 1, pageCount))}
-            disabled={currentPage === pageCount}
-            className="px-3 py-1 border rounded disabled:opacity-50"
-          >Next</button>
-        </div>
+        {pageCount > 1 && (
+          <div className="mt-6 flex items-center justify-between">
+            <button onClick={() => setCurrentPage(Math.max(page - 1, 1))} disabled={page === 1} className="ab-btn ab-btn-sm">
+              ← Prev
+            </button>
+            <span className="ab-label-dim">
+              Page {page} of {pageCount}
+            </span>
+            <button
+              onClick={() => setCurrentPage(Math.min(page + 1, pageCount))}
+              disabled={page === pageCount}
+              className="ab-btn ab-btn-sm"
+            >
+              Next →
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Add New Beat Modal */}
+      {/* Status line */}
+      {notice && (
+        <div
+          role="status"
+          className="fixed bottom-6 left-1/2 flex max-w-[90vw] -translate-x-1/2 items-center gap-4 border border-[var(--fg-20)] bg-[var(--bg)] px-5 py-3"
+          style={{ zIndex: 'var(--z-dialog)' }}
+        >
+          <span className={`text-sm ${notice.ok ? '' : 'text-[var(--accent)]'}`}>{notice.text}</span>
+          <button onClick={() => setNotice(null)} className="ab-btn ab-btn-bare ab-btn-sm" aria-label="Dismiss">
+            ×
+          </button>
+        </div>
+      )}
+
+      {/* Add beat */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-2xl relative">
-            <button
-              onClick={() => setShowAddModal(false)}
-              className="absolute top-3 right-3 text-gray-600 hover:text-gray-900"
-            >✕</button>
-            <h2 className="text-xl font-semibold mb-4">Add New Beat</h2>
-            <div className="grid grid-cols-2 gap-4">
-              {['name','artist','genre','mood','key'].map(f => (
-                <div key={f}>
-                  <input
-                    type="text"
-                    placeholder={f.charAt(0).toUpperCase()+f.slice(1)}
-                    value={newForm[f]}
-                    onChange={e => setNewForm({...newForm, [f]: e.target.value})}
-                    className="w-full border p-2 rounded"
-                  />
-                  {formErrors[f] && <p className="text-red-500 text-sm">{formErrors[f]}</p>}
-                </div>
-              ))}
-              <div className="col-span-2">
-                <input
-                  type="text"
-                  placeholder="BPM (e.g. 86 bpm)"
-                  value={newForm.bpm}
-                  onChange={e => setNewForm({...newForm, bpm: e.target.value})}
-                  className="w-full border p-2 rounded"
-                />
-              </div>
-              {/* Dropzones */}
-              <div>
-                <label className="block mb-1">MP3 (required)</label>
-                <div {...getAudioRoot()} className="border-dashed border-2 border-gray-300 p-4 text-center rounded cursor-pointer">
-                  <input {...getAudioInput()} />
-                  {audioFile ? <p>{audioFile.name}</p> : <p>Drop MP3 or click</p>}
-                </div>
-                {formErrors.audio && <p className="text-red-500 text-sm">{formErrors.audio}</p>}
-              </div>
-              <div>
-                <label className="block mb-1">WAV (optional)</label>
-                <div {...getWavRoot()} className="border-dashed border-2 border-gray-300 p-4 text-center rounded cursor-pointer">
-                  <input {...getWavInput()} />
-                  {wavFile ? <p>{wavFile.name}</p> : <p>Drop WAV or click</p>}
-                </div>
-              </div>
-              <div>
-                <label className="block mb-1">Stems ZIP (optional)</label>
-                <div {...getStemsRoot()} className="border-dashed border-2 border-gray-300 p-4 text-center rounded cursor-pointer">
-                  <input {...getStemsInput()} />
-                  {stemsFile ? <p>{stemsFile.name}</p> : <p>Drop ZIP or click</p>}
-                </div>
-              </div>
-              <div>
-                <label className="block mb-1">Cover (required)</label>
-                <div {...getCoverRoot()} className="border-dashed border-2 border-gray-300 p-4 text-center rounded cursor-pointer">
-                  <input {...getCoverInput()} />
-                  {coverFile
-                    ? <img src={URL.createObjectURL(coverFile)} alt="preview" className="mx-auto w-24 h-24 object-cover rounded" />
-                    : <p>Drop image or click</p>}
-                </div>
-                {formErrors.cover && <p className="text-red-500 text-sm">{formErrors.cover}</p>}
-              </div>
-            </div>
-            <div className="mt-6 flex items-center">
+        <div
+          className="fixed inset-0 flex items-start justify-center overflow-y-auto bg-black/70 px-4 py-10"
+          style={{ zIndex: 'var(--z-dialog)' }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="add-beat-title"
+        >
+          <div className="w-full max-w-2xl border border-[var(--fg-20)] bg-[var(--bg)] p-6 sm:p-8">
+            <div className="mb-8 flex items-center justify-between">
+              <h2 id="add-beat-title" className="ab-label">
+                Add beat
+              </h2>
               <button
-                onClick={handleAddBeat}
+                onClick={() => {
+                  setShowAddModal(false);
+                  resetAddForm();
+                }}
                 disabled={uploading}
-                className="bg-green-600 text-white px-4 py-2 rounded disabled:opacity-50"
+                className="ab-btn ab-btn-bare ab-btn-sm"
               >
-                {uploading ? 'Uploading…' : '➕ Add Beat'}
+                Close ×
               </button>
-              {uploading && <div className="ml-3 animate-spin">⏳</div>}
+            </div>
+
+            <div className="grid gap-x-6 gap-y-5 sm:grid-cols-3">
+              {TEXT_FIELDS.map((f) => (
+                <label key={f} className="block">
+                  <span className="ab-label-dim">
+                    {LABELS[f]}
+                    {f === 'name' && ' *'}
+                  </span>
+                  <input
+                    className="ab-input mt-1"
+                    value={newForm[f]}
+                    placeholder={f === 'bpm' ? 'e.g. 86' : ''}
+                    onChange={(e) => setNewForm({ ...newForm, [f]: e.target.value })}
+                  />
+                  {formErrors[f] && <span className="ab-meta mt-1 block text-[var(--accent)]">{formErrors[f]}</span>}
+                </label>
+              ))}
+            </div>
+
+            <div className="mt-8 grid gap-5 sm:grid-cols-2">
+              <Dropzone label="Tagged preview MP3 * — public" hint="Drop MP3 or click" accept={ACCEPT.preview} file={previewFile} onFile={setPreviewFile} error={formErrors.preview} />
+              <Dropzone label="Cover * — public" hint="Drop image or click" accept={ACCEPT.cover} file={coverFile} onFile={setCoverFile} error={formErrors.cover} preview={coverPreview} />
+              <Dropzone label="Untagged MP3 — buyers only" hint="Drop MP3 or click" accept={ACCEPT.mp3} file={mp3File} onFile={setMp3File} />
+              <Dropzone label="WAV — buyers only" hint="Drop WAV or click" accept={ACCEPT.wav} file={wavFile} onFile={setWavFile} />
+              <Dropzone label="Stems ZIP — buyers only" hint="Drop ZIP or click" accept={ACCEPT.stems} file={stemsFile} onFile={setStemsFile} />
+            </div>
+
+            <div className="mt-8 flex items-center justify-end gap-3">
+              {uploading && <span className="ab-label-dim">Uploading — keep this tab open</span>}
+              <button onClick={handleAddBeat} disabled={uploading} className="ab-btn ab-btn-solid">
+                {uploading ? 'Uploading…' : 'Add beat'}
+              </button>
             </div>
           </div>
         </div>

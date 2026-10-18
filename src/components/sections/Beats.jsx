@@ -31,9 +31,12 @@ export default function Beats() {
           <h2 className="ab-label mb-3">Beats</h2>
           <p className="ab-label-dim mb-14">Play one — the scope follows it</p>
         </Reveal>
-        <Reveal delay={120} className={BEAT_LIST_MIN_H}>
+        {/* Not wrapped in Reveal: its transform would trap the shelf beneath
+            the VHS overlay mid-fade. BeatList reveals its own controls and the
+            shelf fades itself in. */}
+        <div className={BEAT_LIST_MIN_H}>
           <BeatList beats={queue} />
-        </Reveal>
+        </div>
       </div>
     </section>
   );

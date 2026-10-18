@@ -10,6 +10,7 @@ import Freedom from '@/components/sections/Freedom';
 import Horse from '@/components/sections/Horse';
 import SiteFooter from '@/components/SiteFooter';
 import PillNav from '@/components/PillNav';
+import SiteMenu from '@/components/SiteMenu';
 import { useHashTarget } from '@/hooks/useHashTarget';
 
 // Only fetched when the cart is opened.
@@ -40,6 +41,7 @@ export default function Home() {
         <SiteFooter />
       </main>
 
+      <SiteMenu floating />
       <PillNav onOpenCart={() => setCartOpen(true)} />
       {cartOpen && <CartDrawer open onClose={() => setCartOpen(false)} />}
     </>

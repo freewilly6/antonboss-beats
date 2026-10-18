@@ -113,7 +113,7 @@ export default function Licensing() {
       <Navbar />
 
       <main className="flex-grow pt-28 px-4 max-w-7xl mx-auto">
-        <h1 className="text-center text-4xl font-bold mb-12">Licensing Info</h1>
+        <h1 className="text-center text-4xl font-bold mb-12 [:root[data-theme=light]_&]:text-[var(--accent)]">Licensing Info</h1>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-8 text-center">
           {licenses.map((license, index) => (
             <div

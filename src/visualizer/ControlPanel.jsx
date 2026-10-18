@@ -24,7 +24,9 @@ export default function ControlPanel({ configRef, open, onClose, onScopeModeChan
   return (
     <aside
       className="fixed right-0 top-0 h-full w-[min(360px,90vw)] overflow-y-auto border-l border-[var(--fg-20)] bg-black p-6"
-      style={{ zIndex: 'var(--z-chrome)' }}
+      // One step above the floating Menu button, which would otherwise sit on
+      // top of this panel's Close button.
+      style={{ zIndex: 'calc(var(--z-chrome) + 1)' }}
       aria-label="Visualizer controls"
     >
       <div className="mb-8 flex items-center justify-between">
