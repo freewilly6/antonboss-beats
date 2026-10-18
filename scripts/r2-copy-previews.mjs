@@ -6,8 +6,9 @@
 // SAME key, so every stored preview URL keeps working once cdn.antonboss.com
 // points at beat-previews. Server-side copies: nothing is downloaded.
 //
-// Paid files are never touched: anything under wav/, stems/ or mp3/ has a
-// slash in its key and is skipped.
+// Also copies cover art stored under covers/ (older covers live in Supabase
+// Storage and aren't affected). Paid files are never touched: nothing under
+// wav/, stems/ or mp3/ is listed.
 //
 //   node --env-file=.env.local scripts/r2-copy-previews.mjs            # dry run
 //   node --env-file=.env.local scripts/r2-copy-previews.mjs --apply    # copy
@@ -51,20 +52,27 @@ async function head(bucket, key) {
   }
 }
 
-async function* rootMp3s(bucket) {
+async function* list(bucket, prefix, keep) {
   let token;
   do {
-    // Delimiter "/" lists only the root; folders come back as CommonPrefixes.
-    const page = await r2.send(new ListObjectsV2Command({ Bucket: bucket, Delimiter: '/', ContinuationToken: token }));
-    for (const o of page.Contents || []) if (o.Key.toLowerCase().endsWith('.mp3')) yield o;
+    // Delimiter "/" lists one level only; subfolders come back as CommonPrefixes.
+    const page = await r2.send(
+      new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, Delimiter: '/', ContinuationToken: token })
+    );
+    for (const o of page.Contents || []) if (keep(o.Key)) yield o;
     token = page.IsTruncated ? page.NextContinuationToken : undefined;
   } while (token);
 }
 
+async function* publicObjects(bucket) {
+  yield* list(bucket, '', (k) => k.toLowerCase().endsWith('.mp3'));
+  yield* list(bucket, 'covers/', () => true);
+}
+
 async function copyAll() {
-  console.log(`${APPLY ? 'Copying' : 'DRY RUN — would copy'} root .mp3 objects: ${FROM} → ${TO}\n`);
+  console.log(`${APPLY ? 'Copying' : 'DRY RUN — would copy'} root .mp3s and covers/: ${FROM} → ${TO}\n`);
   let copied = 0, skipped = 0, failed = 0;
-  for await (const obj of rootMp3s(FROM)) {
+  for await (const obj of publicObjects(FROM)) {
     const existing = await head(TO, obj.Key);
     if (existing && existing.ContentLength === obj.Size) {
       skipped++;
@@ -93,17 +101,24 @@ async function copyAll() {
 async function verify() {
   const url = env('NEXT_PUBLIC_SUPABASE_URL');
   const key = env('SUPABASE_SERVICE_ROLE_KEY');
-  const res = await fetch(`${url}/rest/v1/BeatFiles?select=id,name,audiourl`, {
+  const res = await fetch(`${url}/rest/v1/BeatFiles?select=id,name,audiourl,cover`, {
     headers: { apikey: key, Authorization: `Bearer ${key}` },
   });
   if (!res.ok) throw new Error(`Supabase: ${res.status} ${await res.text()}`);
   const beats = await res.json();
   console.log(`Checking ${beats.length} beats' previews exist in ${TO}…\n`);
+  const keyOf = (url) => decodeURIComponent(new URL(url).pathname.replace(/^\/+/, ''));
+  // Covers in Supabase Storage aren't part of the move.
+  const onR2 = (url) => /(^|\.)r2\.dev$|^cdn\.antonboss\.com$/.test(new URL(url).host);
   let missing = 0;
   for (const b of beats) {
-    const k = b.audiourl ? decodeURIComponent(new URL(b.audiourl).pathname.replace(/^\/+/, '')) : null;
+    const k = b.audiourl ? keyOf(b.audiourl) : null;
     if (!k || !(await head(TO, k))) {
       console.log(`  MISSING  #${b.id} ${b.name}  ${b.audiourl || '(no preview URL)'}`);
+      missing++;
+    }
+    if (b.cover && onR2(b.cover) && !(await head(TO, keyOf(b.cover)))) {
+      console.log(`  MISSING  #${b.id} ${b.name} cover  ${b.cover}`);
       missing++;
     }
   }

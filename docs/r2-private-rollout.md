@@ -118,8 +118,8 @@ on the **next deployment**.
 | `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | token with **Object Read & Write on both buckets** | same | the current token may only cover `beat-audio`: edit it, or make a new one |
 | `R2_PUBLIC_BUCKET` | `beat-previews` | same | **new** |
 | `R2_PRIVATE_BUCKET` | `beat-audio` | same | **new** (the old `R2_BUCKET` is still read as a fallback; you can remove it after the deploy) |
-| `PUBLIC_R2_URL` | `https://cdn.antonboss.com` | same | unchanged |
-| `NEXT_PUBLIC_R2_URL` | `https://cdn.antonboss.com` | same | unchanged |
+| `PUBLIC_R2_URL` | `https://cdn.antonboss.com` | same | **change**: production currently has beat-audio's `pub-….r2.dev` URL. The audio proxy only streams from this host, so it must match the preview URLs (step 7 rewrites them) |
+| `NEXT_PUBLIC_R2_URL` | `https://cdn.antonboss.com` | same | change to match |
 | `PAYPAL_ENV` | `live` | `sandbox` | **new, required.** Nothing PayPal-related works without it |
 | `PAYPAL_CLIENT_ID` / `PAYPAL_SECRET` | live app | sandbox app | |
 | `NEXT_PUBLIC_PAYPAL_CLIENT_ID` | live client id | sandbox client id | must match `PAYPAL_CLIENT_ID` |
@@ -158,7 +158,11 @@ How this keeps every buyer's downloads working:
 
 - [ ] Make sure the R2 API token has Object Read & Write on **both** `beat-previews` and `beat-audio`.
 - [ ] Paste the CORS JSON above into both buckets.
-- [ ] Leave `beat-audio`'s public access and the `cdn.antonboss.com` domain **exactly as they are**.
+- [ ] Leave `beat-audio`'s public access (its r2.dev URL) and the `cdn.antonboss.com` domain **exactly as they
+      are**. The live site streams previews, and old buyers download, through that r2.dev URL.
+- [ ] Check `cdn.antonboss.com` serves beat-audio today: take any beat's preview URL, swap
+      `https://pub-….r2.dev/` for `https://cdn.antonboss.com/`, and open it. It must play. If it
+      doesn't, connect the domain to beat-audio first (R2 → beat-audio → Settings → Custom Domains).
 
 ### Step 3: Vercel env vars
 
@@ -212,6 +216,10 @@ The preview uses the **production database and buckets** with **sandbox PayPal**
 ### Step 7: Deploy to production
 
 - [ ] Merge / promote the deploy.
+- [ ] **As soon as it's live**, run `supabase/migrations/20261018_03_previews_to_cdn.sql`. It points
+      preview URLs at `https://cdn.antonboss.com/<same key>`. Until it runs, previews won't play
+      (the new deploy's audio proxy only allows the cdn host), so have it open in the SQL editor
+      before you merge. Expect `still_on_r2_dev = 0`.
 - [ ] **Freeze admin uploads from now until step 9.** New uploads go to
       `beat-previews`, and the cdn domain won't serve them until it moves.
 - [ ] Spot-check with an account that bought something before today: Account →
@@ -243,6 +251,9 @@ Run this locally with production R2 + Supabase credentials in `.env.local`:
 - [ ] **Unfreeze admin uploads.** Upload a test beat and confirm its preview plays.
 
 ### Step 10: Turn off public access on `beat-audio`
+
+Only after step 7's SQL has run and step 9 is done. Turning it off earlier stops
+previews playing and breaks old buyers' downloads on the old code.
 
 - [ ] R2 → `beat-audio` → Settings → **Public Development URL (r2.dev)** → Disable.
       Make sure it has **no** custom domains left.
