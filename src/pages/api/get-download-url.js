@@ -2,6 +2,7 @@
 
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { requireAdmin } from '../../lib/adminAuth';
 
 const r2 = new S3Client({
   region: 'auto',  
@@ -23,7 +24,9 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Missing or invalid key parameter' });
   }
 
-  // TODO: insert your AuthN/AuthZ here if you need to restrict access
+  // Signs a link to any object in the bucket, paid files included, so it's
+  // admin only. Nothing on the storefront calls it.
+  if (!(await requireAdmin(req, res))) return;
 
   try {
     const cmd = new GetObjectCommand({

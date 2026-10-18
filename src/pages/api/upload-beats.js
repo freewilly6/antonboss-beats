@@ -5,6 +5,7 @@ import formidable from 'formidable';
 import fs from 'fs';
 import path from 'path';
 import { finished } from 'stream/promises';
+import { requireAdmin } from '../../lib/adminAuth';
 
 // Disable Next.js body parsing so formidable can handle multipart
 export const config = { api: { bodyParser: false } };
@@ -49,6 +50,9 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method Not Allowed. Use POST.' });
   }
 
+  // Admin only, checked before the (up to 1 GB) body is even read.
+  if (!(await requireAdmin(req, res))) return;
+
   let tempPath;
 
   try {
@@ -67,7 +71,9 @@ export default async function handler(req, res) {
     }
 
     // Build a safe, timestamped key, optionally prefixed by folder
-    const folder       = (fields.folder || '').toString().trim();
+    // Only the folders the store uses; anything else lands at the root.
+    const requested    = (fields.folder || '').toString().trim();
+    const folder       = ['wav', 'stems'].includes(requested) ? requested : '';
     const originalName = fileObj.originalFilename || fileObj.filename || 'upload';
     const safeName     = originalName.replace(/[^a-z0-9.\-_]/gi, '_');
     const key          = `${folder ? folder + '/' : ''}${Date.now()}-${safeName}`;

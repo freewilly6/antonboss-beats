@@ -1,8 +1,12 @@
 import { r2 } from "../../lib/r2";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { requireAdmin } from "../../lib/adminAuth";
 
+// Signs a download link for any object in the bucket, paid WAVs and stems
+// included, so it's admin only. Nothing on the storefront calls it.
 export default async function handler(req, res) {
+  if (!(await requireAdmin(req, res))) return;
   const { key } = req.query;   // e.g. /api/r2-sign?key=123/full.mp3
   if (!key) return res.status(400).send("Missing key");
 

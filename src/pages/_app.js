@@ -9,6 +9,7 @@ import { LicenseModalProvider, useLicenseModal } from "@/context/LicenseModalCon
 
 import VhsOverlay from "@/components/VhsOverlay";
 import { Analytics } from "@vercel/analytics/next";
+import { loadSupabase } from "@/lib/supabaseLazy";
 
 // PayPalScriptProvider used to wrap the whole app, which meant every page —
 // the homepage included — fetched the PayPal SDK from paypal.com before it
@@ -38,33 +39,30 @@ function GlobalLicenseModal() {
 
 export default function App({ Component, pageProps }) {
   // Mirrors the session into cookies for middleware.ts (the /admin gate).
-  // The Supabase client is imported here rather than at the top of the file:
-  // statically it would sit in the _app bundle that every page waits on.
+  // Listens to the same client the site signs in with (lib/supabaseClient).
+  // It used to listen to a separate @supabase/ssr client, which keeps its own
+  // session in its own cookies and never saw the site's sign-ins, so the
+  // cookie the gate checks was never written. Loaded lazily: statically it
+  // would sit in the _app bundle every page waits on.
   useEffect(() => {
     let subscription;
     let cancelled = false;
 
-    Promise.all([import("@supabase/ssr"), import("js-cookie")]).then(
-      ([{ createBrowserClient }, { default: Cookies }]) => {
-        if (cancelled) return;
-        const supabase = createBrowserClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-        );
-        ({
-          data: { subscription },
-        } = supabase.auth.onAuthStateChange((event, session) => {
-          if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
-            Cookies.set("sb-access-token", session.access_token, { path: "/" });
-            Cookies.set("sb-refresh-token", session.refresh_token, { path: "/" });
-          }
-          if (event === "SIGNED_OUT") {
-            Cookies.remove("sb-access-token");
-            Cookies.remove("sb-refresh-token");
-          }
-        }));
-      }
-    );
+    Promise.all([loadSupabase(), import("js-cookie")]).then(([supabase, { default: Cookies }]) => {
+      if (cancelled) return;
+      ({
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange((event, session) => {
+        if (session && ["INITIAL_SESSION", "SIGNED_IN", "TOKEN_REFRESHED"].includes(event)) {
+          Cookies.set("sb-access-token", session.access_token, { path: "/", sameSite: "lax" });
+          Cookies.set("sb-refresh-token", session.refresh_token, { path: "/", sameSite: "lax" });
+        }
+        if (event === "SIGNED_OUT") {
+          Cookies.remove("sb-access-token", { path: "/" });
+          Cookies.remove("sb-refresh-token", { path: "/" });
+        }
+      }));
+    });
 
     return () => {
       cancelled = true;

@@ -8,6 +8,7 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import Navbar from '@/components/Navbar';
+import Cookies from 'js-cookie';
 import { supabase } from '@/lib/supabaseClient';
 
 function GoogleMark() {
@@ -49,6 +50,11 @@ export default function SignIn() {
       if (data?.session) {
         // Clear the token fragment Supabase leaves in the URL.
         if (window.location.hash) window.history.replaceState(null, '', window.location.pathname);
+        // Refresh the cookie src/middleware.ts checks before going on, so a
+        // stale one can't bounce the admin straight back here in a loop.
+        // (getSession has already refreshed an expired token.)
+        Cookies.set('sb-access-token', data.session.access_token, { path: '/', sameSite: 'lax' });
+        Cookies.set('sb-refresh-token', data.session.refresh_token, { path: '/', sameSite: 'lax' });
         router.replace(redirectTo);
       } else if (err) {
         console.error('Session fetch error:', err.message);

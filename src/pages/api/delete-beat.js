@@ -1,5 +1,6 @@
 import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { supabaseAdmin } from '../../lib/supabaseAdmin';
+import { requireAdmin, r2KeyFromUrl } from '../../lib/adminAuth';
 
 const r2 = new S3Client({
   region: 'auto',
@@ -11,61 +12,47 @@ const r2 = new S3Client({
 });
 
 export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', 'POST');
+    return res.status(405).json({ error: 'Method Not Allowed' });
+  }
+
+  // Admin only: this deletes with the service-role key.
+  if (!(await requireAdmin(req, res))) return;
+
+  const { id } = req.body || {};
+  if (!id) return res.status(400).json({ error: 'Missing beat ID' });
+
   try {
-    if (req.method !== 'POST') {
-      return res.status(405).json({ error: 'Method Not Allowed' });
-    }
-
-    // Confirm body was parsed properly
-    const body = req.body;
-    console.log('🟢 Received delete request body:', body);
-
-    if (!body || typeof body !== 'object') {
-      console.error('❌ Invalid JSON body:', body);
-      return res.status(400).json({ error: 'Invalid request body' });
-    }
-
-    const { id, userId, audioKey, wavKey, stemsKey } = body;
-
-    if (!id || !userId) {
-      console.error('❌ Missing required fields: id or userId');
-      return res.status(400).json({ error: 'Missing beat ID or user ID' });
-    }
-
-    console.log(`🔄 Deleting beat ${id} for user ${userId}`);
-
-    // Delete from Supabase
-    const { error: dbError } = await supabaseAdmin
+    // Look the files up here rather than trusting keys from the client. The
+    // client used to send just the last path segment, which dropped the
+    // wav/ and stems/ folders, so those files were never actually deleted.
+    const { data: beat, error: readErr } = await supabaseAdmin
       .from('BeatFiles')
-      .delete()
+      .select('audiourl, wav, stems')
       .eq('id', id)
-      .eq('user_id', userId);
+      .single();
+    if (readErr || !beat) return res.status(404).json({ error: 'Beat not found' });
 
+    const { error: dbError } = await supabaseAdmin.from('BeatFiles').delete().eq('id', id);
     if (dbError) {
-      console.error('❌ Supabase delete error:', dbError.message);
+      console.error('[delete-beat] Supabase delete error:', dbError.message);
       return res.status(500).json({ error: dbError.message });
     }
 
-    // Delete associated R2 objects
-    const keys = [audioKey, wavKey, stemsKey].filter(k => typeof k === 'string' && k.trim());
-    console.log('🗑️ Deleting from R2:', keys);
-
+    const keys = [beat.audiourl, beat.wav, beat.stems].map(r2KeyFromUrl).filter(Boolean);
     for (const key of keys) {
       try {
-        await r2.send(new DeleteObjectCommand({
-          Bucket: process.env.R2_BUCKET,
-          Key: key,
-        }));
-        console.log(`✅ Deleted R2 object: ${key}`);
+        await r2.send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET, Key: key }));
       } catch (err) {
-        console.warn(`⚠️ Failed to delete R2 object "${key}":`, err.message);
+        // The row is gone either way; a stray file is only wasted storage.
+        console.warn(`[delete-beat] could not delete R2 object "${key}":`, err.message);
       }
     }
 
     return res.status(200).json({ success: true });
-
   } catch (err) {
-    console.error('🔥 Unhandled server error:', err);
+    console.error('[delete-beat] unexpected error:', err);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
 }
