@@ -10,7 +10,7 @@
 // back with only their key.
 
 import { requireAdmin } from '../../../lib/serverAuth';
-import { UPLOAD_KINDS, bucketFor, newKey, presignPut, publicUrlFor } from '../../../lib/r2';
+import { UPLOAD_KINDS, bucketFor, newKey, presignPut, publicUrlFor, R2_NOT_CONFIGURED } from '../../../lib/r2';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -42,6 +42,7 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     console.error('[upload-url] presign failed:', err);
-    return res.status(500).json({ error: 'Could not prepare the upload' });
+    // Admin only, so the configuration hint is safe to show.
+    return res.status(500).json({ error: err.message === R2_NOT_CONFIGURED ? err.message : 'Could not prepare the upload' });
   }
 }

@@ -25,7 +25,14 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 // production already has. Without an endpoint the SDK silently targets AWS.
 const accountId = process.env.R2_ACCOUNT_ID || process.env.NEXT_PUBLIC_R2_ACCOUNT_ID;
 const endpoint = process.env.R2_ENDPOINT || (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : undefined);
-if (!endpoint) console.error('[r2] Set R2_ENDPOINT or R2_ACCOUNT_ID: no Cloudflare R2 endpoint configured');
+export const R2_NOT_CONFIGURED =
+  'R2 is not configured: set R2_ACCOUNT_ID (or R2_ENDPOINT) in Vercel for this environment and redeploy';
+if (!endpoint) console.error(`[r2] ${R2_NOT_CONFIGURED}`);
+
+/** Signing without an endpoint yields AWS URLs that can't work; fail loudly. */
+function assertConfigured() {
+  if (!endpoint) throw new Error(R2_NOT_CONFIGURED);
+}
 
 export const r2 = new S3Client({
   region: 'auto',
@@ -99,6 +106,7 @@ export function keyFromR2Url(url) {
 
 /** Presigned PUT, for the admin's browser to upload straight to R2. */
 export function presignPut(bucket, key, contentType) {
+  assertConfigured();
   return getSignedUrl(r2, new PutObjectCommand({ Bucket: bucket, Key: key, ContentType: contentType }), {
     expiresIn: UPLOAD_TTL,
   });
@@ -112,6 +120,7 @@ function attachment(filename) {
 
 /** Presigned GET that downloads as `filename`. */
 export function presignDownload(bucket, key, filename, contentType) {
+  assertConfigured();
   return getSignedUrl(
     r2,
     new GetObjectCommand({
