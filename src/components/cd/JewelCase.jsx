@@ -79,6 +79,70 @@ const discGeo = new THREE.CircleGeometry(DISC_R, 128);
 const foilGeo = new THREE.RingGeometry(0.06, DISC_R, 128, 1);
 const rimGeo = new THREE.RingGeometry(DISC_R - 0.006, DISC_R + 0.004, 128, 1);
 
+// ── Disc shine ──────────────────────────────────────────────────────────────
+// The bright bar a real CD throws across its face under a light: two opposite
+// streaks through the centre, rainbow-banded from hub to rim. It's a flat
+// overlay added on top of the art — it can only brighten, never hide it — and
+// it doesn't spin with the disc; it swings with the case's angle instead, the
+// way a real highlight follows your viewpoint. One small texture drawn once
+// and one material shared by every disc: a single extra draw call each.
+
+function drawStreak(ctx, w) {
+  const c = w / 2;
+  const R = w / 2;
+  // Angular profile: sharp, bright streaks along one axis, both directions,
+  // with a soft skirt so the edges don't band.
+  for (let i = 0; i < 360; i++) {
+    const a0 = (i * Math.PI) / 180;
+    const a1 = ((i + 1.2) * Math.PI) / 180;
+    const k = Math.abs(Math.cos(a0));
+    const v = Math.round(255 * (k ** 60 * 0.95 + k ** 8 * 0.2));
+    ctx.fillStyle = `rgb(${v},${v},${v})`;
+    ctx.beginPath();
+    ctx.moveTo(c, c);
+    ctx.arc(c, c, R, a0, a1);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // Rainbow banding by radius, multiplied in: violet near the hub through to
+  // red at the rim, as on a pressed disc. Dark at the hub and past the rim.
+  ctx.globalCompositeOperation = 'multiply';
+  const g = ctx.createRadialGradient(c, c, 0, c, c, R);
+  g.addColorStop(0, '#000');
+  g.addColorStop(0.3, '#000');
+  g.addColorStop(0.38, '#8a7dff');
+  g.addColorStop(0.5, '#7fd8ff');
+  g.addColorStop(0.62, '#b8ffcf');
+  g.addColorStop(0.74, '#fff6b0');
+  g.addColorStop(0.86, '#ffc1a8');
+  g.addColorStop(0.97, '#ff9ec7');
+  g.addColorStop(1, '#000');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, w);
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+let streakMat = null;
+function getStreakMaterial() {
+  if (streakMat || typeof document === 'undefined') return streakMat;
+  const { texture } = makeCanvasTexture(256, 256, (ctx, w) => drawStreak(ctx, w));
+  streakMat = new THREE.MeshBasicMaterial({
+    map: texture,
+    color: new THREE.Color(0.55, 0.55, 0.55), // overall strength
+    transparent: true,
+    depthWrite: false,
+    toneMapped: false,
+    // Colour-only additive, same as the plastic: adds light, leaves alpha.
+    blending: THREE.CustomBlending,
+    blendEquation: THREE.AddEquation,
+    blendSrc: THREE.OneFactor,
+    blendDst: THREE.OneFactor,
+    blendSrcAlpha: THREE.ZeroFactor,
+    blendDstAlpha: THREE.OneFactor,
+  });
+  return streakMat;
+}
+
 function damp(current, target, lambda, dt) {
   return THREE.MathUtils.damp(current, target, lambda, dt);
 }
@@ -340,7 +404,9 @@ export default function JewelCase({
   const root = useRef();
   const lid = useRef();
   const disc = useRef();
+  const streak = useRef();
   const [hovered, setHovered] = useState(false);
+  const shine = useMemo(getStreakMaterial, []);
 
   const discMap = useDiscTexture(beat.cover);
   const spine = useSpineTexture(beat, index);
@@ -392,6 +458,17 @@ export default function JewelCase({
     const d = disc.current;
     d.position.z = damp(d.position.z, spinning ? 0.03 : 0.012, 6, dt);
     if (spinning) d.rotation.z -= SPIN_SPEED * dt;
+
+    // The highlight follows the viewing angle, not the spin: it swings as the
+    // case slides along the shelf or tilts toward the pointer, and drifts a
+    // touch on its own so a still case still glints. Each case is offset so
+    // the row doesn't flash in unison.
+    const st = streak.current;
+    if (st) {
+      st.position.z = d.position.z + 0.0025;
+      st.rotation.z =
+        0.7 + g.rotation.y * 2.4 - g.rotation.x * 1.8 + Math.sin(state.clock.elapsedTime * 0.35 + index) * 0.12;
+    }
   });
 
   const half = CASE_W / 2;
@@ -434,10 +511,19 @@ export default function JewelCase({
             metalness={0.1}
             clearcoat={1}
             clearcoatRoughness={0.08}
+            // A thin-film rainbow in the reflections, shifting with angle —
+            // the holographic cast of a pressed disc. Kept low so the art
+            // stays readable; it only shows where the disc catches light.
+            iridescence={0.45}
+            iridescenceIOR={1.6}
+            iridescenceThicknessRange={[180, 650]}
           />
         </mesh>
         <mesh geometry={rimGeo} position={[0, 0, 0.001]} material={chrome} />
       </group>
+      {shine && (
+        <mesh ref={streak} position={[DISC_X, 0, 0.015]} geometry={discGeo} material={shine} renderOrder={1} />
+      )}
 
       {/* Lid, pivoting on the hinge. Children are offset so x=0 is the hinge line. */}
       <group ref={lid} position={[-half, 0, CASE_D / 2 - LID_D / 2]}>
