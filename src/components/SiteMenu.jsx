@@ -22,7 +22,7 @@ const PRIMARY = [
 
 const SECONDARY = [
   { href: '/beats', label: 'Beat list' },
-  { href: '/downloads', label: 'Downloads' },
+  { href: '/account?tab=library', label: 'Downloads' },
   { href: '/license', label: 'Licensing' },
   { href: 'https://www.youtube.com/@AntonBoss-pd', label: 'YouTube', external: true },
   { href: 'mailto:antonbosspd@gmail.com', label: 'Email', external: true },

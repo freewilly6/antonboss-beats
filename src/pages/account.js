@@ -3,15 +3,12 @@
 // The signed-in visitor's home: who they are, what they own, what they've
 // ordered, and the one profile field worth editing.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import Layout from '@/components/Layout';
 import { supabase } from '@/lib/supabaseClient';
-
-// In tier order — the index decides which files a license unlocks.
-const TIERS = ['Basic License', 'Premium License', 'Premium Plus License', 'Unlimited License'];
 
 const TABS = [
   { id: 'library', label: 'Library' },
@@ -19,89 +16,74 @@ const TABS = [
   { id: 'profile', label: 'Profile' },
 ];
 
-function parseBeats(raw) {
-  if (Array.isArray(raw)) return raw;
-  if (typeof raw === 'string') {
-    try {
-      return JSON.parse(raw);
-    } catch {
-      return [];
-    }
-  }
-  return [];
-}
-
-function normalizeItem(b, purchase) {
-  const license = (b.licenseType ?? b.license ?? b.name ?? '').trim();
-  return {
-    id: b.id ?? b.beatId,
-    name: b.name || b.title || 'Untitled',
-    cover: b.cover,
-    license,
-    tier: TIERS.indexOf(license),
-    price: Number(b.price) || null,
-    mp3Url: b.audioUrl ?? b.mp3 ?? b.file_path,
-    wavUrl: b.wav,
-    stemsUrl: b.stems,
-    purchasedAt: purchase.created_at,
-  };
-}
+const STATUS_LABELS = {
+  paid: 'Paid',
+  pending: 'Awaiting PayPal',
+  refunded: 'Refunded',
+  reversed: 'Reversed',
+  denied: 'Declined',
+};
 
 const formatDate = (iso) =>
   iso ? new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
 
+// While a payment awaits PayPal's confirmation, check back this often…
+const POLL_MS = 5000;
+// …for about two minutes, after which the buyer can refresh themselves.
+const POLL_LIMIT = 24;
+
 export default function AccountPage() {
   const router = useRouter();
   const [user, setUser] = useState(null);
-  const [purchases, setPurchases] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // { library, orders, pending, expiresAt } from /api/downloads. Files are
+  // presigned server-side for exactly what each paid license includes.
+  const [data, setData] = useState(null);
   const [error, setError] = useState('');
+  const [polls, setPolls] = useState(0);
 
   const tab = TABS.some((t) => t.id === router.query.tab) ? router.query.tab : 'library';
   const setTab = (id) => router.replace({ query: { tab: id } }, undefined, { shallow: true, scroll: false });
 
-  useEffect(() => {
-    let cancelled = false;
-
-    (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.replace('/signin?redirectTo=/account');
-        return;
-      }
-      if (cancelled) return;
-      setUser(session.user);
-
-      // Seeded rows only carry an email, so match on either.
-      const { data, error: err } = await supabase
-        .from('purchases')
-        .select('*')
-        .or(`user_id.eq.${session.user.id},email.eq."${session.user.email}"`)
-        .order('created_at', { ascending: false });
-
-      if (cancelled) return;
-      if (err) {
-        console.error('Error loading purchases:', err);
-        setError('Couldn’t load your purchases. Try refreshing.');
-      } else {
-        setPurchases(data || []);
-      }
-      setLoading(false);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
+  const load = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      router.replace('/signin?redirectTo=/account');
+      return;
+    }
+    setUser((u) => u || session.user);
+    try {
+      const res = await fetch('/api/downloads', { headers: { Authorization: `Bearer ${session.access_token}` } });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+      setData(json);
+      setError('');
+    } catch (err) {
+      console.error('Error loading downloads:', err);
+      setError('Couldn’t load your purchases. Try refreshing.');
+      setData((d) => d || { library: [], orders: [], pending: false });
+    }
   }, [router]);
 
-  const library = useMemo(
-    () => purchases.flatMap((p) => parseBeats(p.beats).map((b) => normalizeItem(b, p))),
-    [purchases]
-  );
+  useEffect(() => {
+    load();
+  }, [load]);
 
+  // Poll while PayPal hasn't confirmed a payment yet, so files appear by themselves.
+  useEffect(() => {
+    if (!data?.pending || polls >= POLL_LIMIT) return;
+    const t = setTimeout(() => {
+      setPolls((n) => n + 1);
+      load();
+    }, POLL_MS);
+    return () => clearTimeout(t);
+  }, [data, polls, load]);
+
+  const loading = !data;
+  const library = useMemo(() => data?.library || [], [data]);
+  const orders = useMemo(() => data?.orders || [], [data]);
   const totalSpent = useMemo(
-    () => purchases.reduce((sum, p) => sum + (Number(p.total) || 0), 0),
-    [purchases]
+    () => orders.filter((o) => o.status === 'paid').reduce((sum, o) => sum + (Number(o.total) || 0), 0),
+    [orders]
   );
 
   const signOut = async () => {
@@ -151,7 +133,7 @@ export default function AccountPage() {
         <dl className="mt-12 grid grid-cols-2 border-y border-[var(--fg-10)] sm:grid-cols-4">
           {[
             ['Beats owned', library.length],
-            ['Orders', purchases.length],
+            ['Orders', orders.length],
             ['Spent', `$${totalSpent.toFixed(2)}`],
             ['Member since', formatDate(user.created_at)],
           ].map(([label, value]) => (
@@ -179,8 +161,8 @@ export default function AccountPage() {
 
         <div role="tabpanel" className="mt-8">
           {error && <p className="ab-body mb-6 text-[var(--accent)]">{error}</p>}
-          {tab === 'library' && <Library items={library} loading={loading} />}
-          {tab === 'orders' && <Orders purchases={purchases} loading={loading} />}
+          {tab === 'library' && <Library items={library} loading={loading} pending={data?.pending} />}
+          {tab === 'orders' && <Orders orders={orders} loading={loading} />}
           {tab === 'profile' && <Profile user={user} provider={provider} onSaved={setUser} />}
         </div>
       </div>
@@ -199,67 +181,78 @@ function Empty({ children }) {
   );
 }
 
-function Library({ items, loading }) {
+function Library({ items, loading, pending }) {
   if (loading) return <p className="ab-label-dim">Loading…</p>;
-  if (!items.length) return <Empty>You haven’t picked up any beats yet.</Empty>;
+
+  const notice = pending && (
+    <p className="ab-card mb-6 px-4 py-3 text-sm" role="status">
+      A payment is waiting for PayPal to confirm. Its files appear here automatically — usually within a minute.
+    </p>
+  );
+  if (!items.length) return notice || <Empty>You haven’t picked up any beats yet.</Empty>;
 
   return (
-    <ul className="grid gap-4 md:grid-cols-2">
-      {items.map((item) => (
-        <li key={`${item.id}-${item.license}-${item.purchasedAt}`} className="ab-card flex gap-4 p-4">
-          <img
-            src={item.cover || '/images/beats/default-cover.png'}
-            alt=""
-            className="h-20 w-20 flex-none object-cover"
-          />
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <p className="truncate text-sm">{item.name}</p>
-            <p className="ab-meta truncate">
-              {item.license || 'License'} · {formatDate(item.purchasedAt)}
-            </p>
-            <div className="mt-auto flex flex-wrap gap-2 pt-2">
-              {item.mp3Url && (
-                <a href={item.mp3Url} download className="ab-btn ab-btn-sm">MP3</a>
-              )}
-              {item.tier >= 1 && item.wavUrl && (
-                <a href={item.wavUrl} download className="ab-btn ab-btn-sm">WAV</a>
-              )}
-              {item.tier >= 2 && item.stemsUrl && (
-                <a href={item.stemsUrl} download className="ab-btn ab-btn-sm">Stems</a>
-              )}
-              <Link href="/license" className="ab-btn ab-btn-sm ab-btn-bare">Terms</Link>
+    <>
+      {notice}
+      <ul className="grid gap-4 md:grid-cols-2">
+        {items.map((item) => (
+          <li key={item.beatId} className="ab-card flex gap-4 p-4">
+            <img
+              src={item.cover || '/images/beats/default-cover.png'}
+              alt=""
+              className="h-20 w-20 flex-none object-cover"
+            />
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <p className="truncate text-sm">{item.name}</p>
+              <p className="ab-meta truncate">
+                {item.license} · {formatDate(item.purchasedAt)}
+              </p>
+              <div className="mt-auto flex flex-wrap gap-2 pt-2">
+                {item.files.map((f) => (
+                  // Signed link with Content-Disposition: attachment, so it
+                  // saves as f.filename. Valid for 24 hours from page load.
+                  <a key={f.kind} href={f.url} rel="noopener" className="ab-btn ab-btn-sm" title={f.filename}>
+                    {f.label}
+                  </a>
+                ))}
+                {item.missing?.map((kind) => (
+                  <span key={kind} className="ab-btn ab-btn-sm opacity-40" title="Not uploaded yet — contact us">
+                    {kind === 'stems' ? 'Stems' : kind.toUpperCase()} soon
+                  </span>
+                ))}
+                <Link href="/license" className="ab-btn ab-btn-sm ab-btn-bare">Terms</Link>
+              </div>
             </div>
-          </div>
-        </li>
-      ))}
-    </ul>
+          </li>
+        ))}
+      </ul>
+      <p className="ab-meta mt-6">Download links are personal and refresh each time you open this page.</p>
+    </>
   );
 }
 
-function Orders({ purchases, loading }) {
+function Orders({ orders, loading }) {
   if (loading) return <p className="ab-label-dim">Loading…</p>;
-  if (!purchases.length) return <Empty>No orders yet.</Empty>;
+  if (!orders.length) return <Empty>No orders yet.</Empty>;
 
   return (
     <ul className="divide-y divide-[var(--fg-10)] border-y border-[var(--fg-10)]">
-      {purchases.map((p, i) => {
-        const beats = parseBeats(p.beats);
-        return (
-          <li key={p.id ?? p.paypal_transaction_id ?? i} className="flex flex-wrap items-baseline gap-x-8 gap-y-2 py-5">
-            <span className="ab-meta w-28">{formatDate(p.created_at)}</span>
-            <span className="min-w-0 flex-1 text-sm">
-              {beats.map((b) => b.name || b.title).filter(Boolean).join(', ') || '—'}
-              <span className="ab-meta ml-3">
-                {beats.length} item{beats.length === 1 ? '' : 's'}
-              </span>
+      {orders.map((o, i) => (
+        <li key={o.orderId ?? i} className="flex flex-wrap items-baseline gap-x-8 gap-y-2 py-5">
+          <span className="ab-meta w-28">{formatDate(o.createdAt)}</span>
+          <span className="min-w-0 flex-1 text-sm">
+            {o.items.map((b) => b.name).filter(Boolean).join(', ') || '—'}
+            <span className="ab-meta ml-3">
+              {o.items.length} item{o.items.length === 1 ? '' : 's'}
             </span>
-            {p.total != null && <span className="text-sm">${Number(p.total).toFixed(2)}</span>}
-            {p.paypal_transaction_id && (
-              <span className="ab-meta w-full truncate sm:w-auto">#{p.paypal_transaction_id}</span>
-            )}
-          </li>
-        );
-      })}
+          </span>
+          <span className={`ab-label ${o.status === 'paid' ? '' : '!text-[var(--accent)]'}`}>
+            {STATUS_LABELS[o.status] || o.status}
+          </span>
+          {o.total != null && <span className="text-sm">${Number(o.total).toFixed(2)}</span>}
+          {o.orderId && <span className="ab-meta w-full truncate sm:w-auto">#{o.orderId}</span>}
+        </li>
+      ))}
     </ul>
   );
 }

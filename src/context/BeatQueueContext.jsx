@@ -15,9 +15,11 @@ export function BeatQueueProvider({ children }) {
       // Loaded here, not imported up top: see lib/supabaseLazy.js.
       const supabase = await loadSupabase();
       if (cancelled) return;
+      // Public columns only. `licenses` carried each tier's file location, so
+      // every visitor's browser used to receive the paid files' URLs.
       const { data, error } = await supabase
         .from('BeatFiles')
-        .select('id,name,artist,audiourl,cover,genre,mood,key,bpm,licenses')
+        .select('id,name,artist,audiourl,cover,genre,mood,key,bpm')
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -41,7 +43,6 @@ export function BeatQueueProvider({ children }) {
         mood:     b.mood      || '',
         key:      b.key,
         bpm:      b.bpm,
-        licenses: b.licenses  || [],
       }));
       if (cancelled) return;
       setQueue(normalizedBeats);

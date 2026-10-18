@@ -57,47 +57,32 @@ export default function LicenseModal() {
   const title    = beat.name   || beat.title   || 'Untitled'
   const coverUrl = beat.cover  || '/images/beats/default-cover.png'
 
-  // 3) Define exactly which files each tier ships
+  // 3) The tiers on offer. Which files each includes lives in lib/licenses.js.
   const licenses = [
     {
       name: 'Basic License',
       price: 24.99,
       terms: 'MP3 | Personal Use',
-      mp3:   beat.audiourl || beat.audioUrl,
-      wav:   null,
-      stems: null,
     },
     {
       name: 'Premium License',
       price: 34.99,
       terms: 'MP3 + WAV',
-      mp3:   beat.audiourl || beat.audioUrl,
-      wav:   beat.wav   || null,
-      stems: null,
     },
     {
       name: 'Premium Plus License',
       price: 49.99,
       terms: 'MP3 + WAV + STEMS',
-      mp3:   beat.audiourl || beat.audioUrl,
-      wav:   beat.wav   || null,
-      stems: beat.stems || null,
     },
     {
       name: 'Unlimited License',
       price: 74.99,
       terms: 'Full Package',
-      mp3:   beat.audiourl || beat.audioUrl,
-      wav:   beat.wav   || null,
-      stems: beat.stems || null,
     },
     {
       name: 'Exclusive License',
       price: null,
       terms: 'Negotiate',
-      mp3:   null,
-      wav:   null,
-      stems: null,
     },
   ]
 
@@ -123,9 +108,8 @@ export default function LicenseModal() {
       cover:       coverUrl,
       licenseType: lic.name,
       price:       lic.price || 0,
-      audioUrl:    lic.mp3,
-      wav:         lic.wav,
-      stems:       lic.stems,
+      // No file locations in the cart: files are delivered by /api/downloads
+      // once PayPal confirms payment.
     })
 
     closeLicenseModal()

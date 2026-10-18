@@ -26,7 +26,6 @@ export default function BeatList({ beats }) {
       mood:     b.mood      || '',
       key:      b.key       || '',
       bpm:      b.bpm       || '',
-      licenses: b.licenses  || [],
     }));
   // ────────────────────────────────────────────────────────
 

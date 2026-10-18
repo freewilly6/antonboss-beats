@@ -26,7 +26,8 @@ const PayPalButtons = dynamic(
 function CartPageInner() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
-  const [accessToken, setAccessToken] = useState(null);
+  const [checkoutError, setCheckoutError] = useState('');
+  const [confirmedPaid, setConfirmedPaid] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [purchaseComplete, setPurchaseComplete] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
@@ -47,68 +48,57 @@ function CartPageInner() {
         const u = session.user;
         setUser(u);
         setIsAdmin(u.email === ADMIN_EMAIL);
-        setAccessToken(session.access_token);
         setLoading(false);
       }
     };
     checkAuth();
   }, [router]);
-  const handlePayPalApproval = async (details) => {
-  try {
-   // ── 1) Build your payload off the canonical beatId ─────────
-const payloadItems = cart.map(item => ({
-  beatId:      item.beatId,          // always what you passed into addToCart
-  licenseName: item.licenseType,
-}));
+  // Fresh token per call: a long checkout can outlive the one from page load.
+  const authHeaders = async () => {
+    const { data } = await supabase.auth.getSession();
+    return {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${data?.session?.access_token || ''}`,
+    };
+  };
 
-// (Optional) If you really need to enforce integer IDs
-// you could still check here, but supabase integer PKs come through as numbers anyway.
-// const bad = payloadItems.filter(pi => typeof pi.beatId !== 'number');
-// if (bad.length) { … }
+  // 1) The server prices the cart and creates the PayPal order, so what's
+  //    paid for is fixed before the buyer ever sees PayPal.
+  const createOrder = async () => {
+    setCheckoutError('');
+    const res = await fetch('/api/paypal/create-order', {
+      method: 'POST',
+      headers: await authHeaders(),
+      body: JSON.stringify({
+        items: cart.map((item) => ({ beatId: item.beatId, licenseName: item.licenseType })),
+      }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || !json.orderID) {
+      setCheckoutError(json.error || 'Could not start checkout. Please try again.');
+      throw new Error(json.error || 'create-order failed');
+    }
+    return json.orderID;
+  };
 
-
-   // ── 2) Call your purchase‐finalization endpoint ────────────
-const response = await fetch('/api/complete-purchase', {
-  method:  'POST',
-  headers: {
-    'Content-Type':  'application/json',
-    Authorization:    `Bearer ${accessToken}`,
-  },
-  body: JSON.stringify({
-    orderID: details.id,
-    items:   payloadItems,
-  }),
-});
-
-
-    const result = await response.json();
-    if (!response.ok) {
-      // Special‐case “not found” so you can report it cleanly
-      if (result.error?.includes('not found')) {
-        alert(
-          'One of the beats you tried to purchase could not be found. ' +
-          'It may have been removed—please refresh and try again.'
-        );
-      } else {
-        throw new Error(result.error || 'Failed to finalize purchase');
-      }
+  // 2) After approval, the server captures. Files unlock when PayPal's
+  //    webhook confirms the payment — usually within seconds.
+  const onApprove = async ({ orderID }) => {
+    const res = await fetch('/api/paypal/capture-order', {
+      method: 'POST',
+      headers: await authHeaders(),
+      body: JSON.stringify({ orderID }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setCheckoutError(json.error || 'Something went wrong completing the payment.');
       return;
     }
-
-    // ── 4) Success! ────────────────────────────────────────────
     clearCart();
+    setConfirmedPaid(json.status === 'paid');
     setPurchaseComplete(true);
     setShowConfirmation(true);
-
-  } catch (err) {
-    console.error('❌ Purchase failed:', err);
-    alert(
-      'Payment succeeded, but something went wrong on our end. ' +
-      'Please contact support with this message:\n\n' +
-      err.message
-    );
-  }
-};
+  };
 
   if (loading) return null;
 
@@ -179,21 +169,11 @@ const response = await fetch('/api/complete-purchase', {
               <div className="w-full sm:max-w-xs">
                 <PayPalButtons
                   style={{ layout: 'horizontal' }}
-                  createOrder={(data, actions) =>
-                    actions.order.create({
-                      purchase_units: [
-                        {
-                          amount: { value: getTotal().toFixed(2) },
-                          description: 'Your Beat Purchase',
-                        },
-                      ],
-                    })
-                  }
-                  onApprove={async (data, actions) => {
-                    const details = await actions.order.capture();
-                    await handlePayPalApproval(details);
-                  }}
+                  createOrder={createOrder}
+                  onApprove={onApprove}
+                  onError={() => setCheckoutError('PayPal hit a problem. You have not been charged — please try again.')}
                 />
+                {checkoutError && <p className="ab-body mt-3 text-[var(--accent)]">{checkoutError}</p>}
                 <p className="ab-meta mt-3">
                   Files appear in your <Link href="/account" className="underline hover:text-[var(--fg)]">account</Link> as
                   soon as payment clears.
@@ -215,7 +195,11 @@ const response = await fetch('/api/complete-purchase', {
           <div className="w-full max-w-sm border border-[var(--fg-20)] bg-[var(--bg)] p-8 text-center">
             <p className="ab-label mb-4">Order complete</p>
             <h2 id="purchase-done" className="ab-display">Thank you.</h2>
-            <p className="ab-body mt-4">Your beats are ready to download.</p>
+            <p className="ab-body mt-4">
+              {confirmedPaid
+                ? 'Your beats are ready to download.'
+                : 'Payment received. Your files unlock in your account as soon as PayPal confirms it — usually within a minute.'}
+            </p>
             <div className="mt-8 flex justify-center gap-3">
               <button onClick={() => setShowConfirmation(false)} className="ab-btn">
                 Close
@@ -223,7 +207,7 @@ const response = await fetch('/api/complete-purchase', {
               <button
                 onClick={() => {
                   setShowConfirmation(false);
-                  router.push('/account');
+                  router.push('/account?tab=library');
                 }}
                 className="ab-btn ab-btn-solid"
               >
@@ -236,7 +220,7 @@ const response = await fetch('/api/complete-purchase', {
 
       {purchaseComplete && !showConfirmation && (
         <div className="fixed bottom-6 right-6" style={{ zIndex: 'var(--z-chrome)' }}>
-          <button onClick={() => router.push('/account')} className="ab-btn ab-btn-solid">
+          <button onClick={() => router.push('/account?tab=library')} className="ab-btn ab-btn-solid">
             My downloads
           </button>
         </div>
@@ -252,7 +236,8 @@ export default function CartPage() {
   return (
     <PayPalScriptProvider
       options={{
-        'client-id': process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID,
+        // v8 of @paypal/react-paypal-js takes camelCase; 'client-id' is the old spelling.
+        clientId: process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID,
         currency: 'USD',
       }}
     >

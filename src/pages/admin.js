@@ -1,8 +1,11 @@
 // pages/admin.js
 //
 // The store's back office: add beats, edit their details, swap their files,
-// delete them. middleware.ts keeps non-admins off this page, and every API
-// route it calls checks the admin session again (lib/adminAuth.js), since
+// delete them. Files upload straight from the browser to R2 via presigned
+// links (/api/admin/upload-url): the tagged preview and cover to the public
+// bucket, paid files (untagged MP3, WAV, stems) to the private one. This page
+// only ever learns whether a beat HAS each paid file, never where it is. middleware.ts keeps non-admins off this page, and every API
+// route it calls checks the admin session again (lib/serverAuth.js), since
 // those routes are reachable without the page.
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -32,7 +35,8 @@ const SORTS = [
 // react-dropzone 14 takes accept as { mime: [extensions] }; a bare MIME
 // string is ignored, which let any file through the MP3 and cover drops.
 const ACCEPT = {
-  audio: { 'audio/mpeg': ['.mp3'] },
+  preview: { 'audio/mpeg': ['.mp3'] },
+  mp3: { 'audio/mpeg': ['.mp3'] },
   wav: { 'audio/wav': ['.wav'], 'audio/x-wav': ['.wav'], 'audio/wave': ['.wav'] },
   stems: { 'application/zip': ['.zip'], 'application/x-zip-compressed': ['.zip'] },
   cover: { 'image/*': [] },
@@ -53,6 +57,10 @@ async function authedFetch(url, options = {}) {
   return json;
 }
 
+/**
+ * @param {{ label: string, hint: string, accept: Record<string, string[]>, file: File | null,
+ *           onFile: (f: File) => void, error?: string, preview?: string | null }} props
+ */
 function Dropzone({ label, hint, accept, file, onFile, error, preview }) {
   const onDrop = useCallback((files) => files[0] && onFile(files[0]), [onFile]);
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop, accept, multiple: false });
@@ -91,11 +99,12 @@ export default function AdminPage() {
   // Add beat
   const [showAddModal, setShowAddModal] = useState(false);
   const [newForm, setNewForm] = useState(EMPTY_FORM);
-  const [audioFile, setAudioFile] = useState(null);
+  const [previewFile, setPreviewFile] = useState(null); // tagged MP3 (public)
+  const [mp3File, setMp3File] = useState(null); // untagged MP3 (private)
   const [wavFile, setWavFile] = useState(null);
   const [stemsFile, setStemsFile] = useState(null);
   const [coverFile, setCoverFile] = useState(null);
-  const [formErrors, setFormErrors] = useState({});
+  const [formErrors, setFormErrors] = useState(/** @type {Record<string, string>} */ ({}));
   const [uploading, setUploading] = useState(false);
 
   // Inline edit
@@ -104,6 +113,7 @@ export default function AdminPage() {
 
   // Search, sort, pagination
   const [searchQuery, setSearchQuery] = useState('');
+  const [onlyMissingMp3, setOnlyMissingMp3] = useState(false);
   const [sortOption, setSortOption] = useState('created_at-desc');
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -121,12 +131,12 @@ export default function AdminPage() {
   useEffect(() => () => coverPreview && URL.revokeObjectURL(coverPreview), [coverPreview]);
 
   const fetchBeatFiles = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('BeatFiles')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (error) say(false, `Couldn’t load beats: ${error.message}`);
-    else setBeatFiles(data || []);
+    try {
+      const { beats } = await authedFetch('/api/admin/beats');
+      setBeatFiles(beats || []);
+    } catch (err) {
+      say(false, `Couldn’t load beats: ${err.message}`);
+    }
     setInitialLoad(false);
   }, []);
 
@@ -152,7 +162,9 @@ export default function AdminPage() {
   const filteredSorted = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     const arr = beatFiles.filter(
-      (b) => !q || [b.name, b.artist, b.genre, b.mood].some((v) => String(v ?? '').toLowerCase().includes(q))
+      (b) =>
+        (!onlyMissingMp3 || !b.has?.mp3) &&
+        (!q || [b.name, b.artist, b.genre, b.mood].some((v) => String(v ?? '').toLowerCase().includes(q)))
     );
     const [field, dir] = sortOption.split('-');
     const sign = dir === 'asc' ? 1 : -1;
@@ -160,38 +172,40 @@ export default function AdminPage() {
       if (field === 'bpm') return (bpmNumber(a.bpm) - bpmNumber(b.bpm)) * sign;
       return String(a[field] ?? '').localeCompare(String(b[field] ?? '')) * sign;
     });
-  }, [beatFiles, searchQuery, sortOption]);
+  }, [beatFiles, searchQuery, sortOption, onlyMissingMp3]);
+
+  const missingMp3Count = beatFiles.filter((b) => !b.has?.mp3).length;
 
   const pageCount = Math.max(1, Math.ceil(filteredSorted.length / PAGE_SIZE));
   const page = Math.min(currentPage, pageCount);
   const paginated = filteredSorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  // R2 upload, through the admin-only route.
-  const uploadToR2 = async (file, folder = '') => {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('folder', folder);
-    const { url } = await authedFetch('/api/upload-beats', { method: 'POST', body: formData });
-    return url;
-  };
-
-  const uploadCover = async (file, prefix = '') => {
-    const path = `${prefix}${Date.now()}-${file.name.replace(/[^a-z0-9.\-_]/gi, '_')}`;
-    const { error } = await supabase.storage.from('covers').upload(path, file, { upsert: true, contentType: file.type });
-    if (error) throw error;
-    return supabase.storage.from('covers').getPublicUrl(path).data.publicUrl;
-  };
-
-  const updateBeat = (id, fieldsToUpdate) =>
-    authedFetch('/api/update-beat', {
+  /**
+   * Upload one file straight to R2. The server picks the bucket and key from
+   * `kind`; we get back the key, plus the public URL for public kinds.
+   */
+  const uploadFile = async (kind, file) => {
+    const { uploadUrl, contentType, key, publicUrl } = await authedFetch('/api/admin/upload-url', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, fieldsToUpdate }),
+      body: JSON.stringify({ kind, filename: file.name, contentType: file.type }),
+    });
+    const put = await fetch(uploadUrl, { method: 'PUT', headers: { 'Content-Type': contentType }, body: file });
+    if (!put.ok) throw new Error(`Upload of ${file.name} failed (${put.status}) — check the bucket's CORS rule`);
+    return { key, publicUrl };
+  };
+
+  const saveBeat = (method, body) =>
+    authedFetch('/api/admin/beats', {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
     });
 
   const resetAddForm = () => {
     setNewForm(EMPTY_FORM);
-    setAudioFile(null);
+    setPreviewFile(null);
+    setMp3File(null);
     setWavFile(null);
     setStemsFile(null);
     setCoverFile(null);
@@ -199,40 +213,32 @@ export default function AdminPage() {
   };
 
   const handleAddBeat = async () => {
+    /** @type {Record<string, string>} */
     const errs = {};
     if (!newForm.name.trim()) errs.name = 'Name required';
-    if (!audioFile) errs.audio = 'MP3 required';
+    if (!previewFile) errs.preview = 'Tagged preview required';
     if (!coverFile) errs.cover = 'Cover required';
     setFormErrors(errs);
     if (Object.keys(errs).length) return;
 
     setUploading(true);
     try {
-      const [audioUrl, wavUrl, stemsUrl, coverUrl] = await Promise.all([
-        uploadToR2(audioFile, ''),
-        wavFile ? uploadToR2(wavFile, 'wav') : null,
-        stemsFile ? uploadToR2(stemsFile, 'stems') : null,
-        uploadCover(coverFile),
+      const [preview, cover, mp3, wav, stems] = await Promise.all([
+        uploadFile('preview', previewFile),
+        uploadFile('cover', coverFile),
+        mp3File ? uploadFile('mp3', mp3File) : null,
+        wavFile ? uploadFile('wav', wavFile) : null,
+        stemsFile ? uploadFile('stems', stemsFile) : null,
       ]);
 
-      const { error } = await supabase.from('BeatFiles').insert([
-        {
-          ...newForm,
-          audiourl: audioUrl,
-          wav: wavUrl,
-          stems: stemsUrl,
-          cover: coverUrl,
-          user_id: user.id,
-          licenses: [
-            { name: 'Basic License', price: 24.99, file_path: audioUrl },
-            { name: 'Premium License', price: 34.99, file_path: wavUrl },
-            // Same spelling as LicenseModal, account and the downloads tiers.
-            { name: 'Premium Plus License', price: 49.99, file_path: stemsUrl },
-            { name: 'Unlimited License', price: 74.99, file_path: stemsUrl },
-          ],
-        },
-      ]);
-      if (error) throw error;
+      await saveBeat('POST', {
+        ...newForm,
+        previewUrl: preview.publicUrl,
+        coverUrl: cover.publicUrl,
+        mp3Key: mp3?.key,
+        wavKey: wav?.key,
+        stemsKey: stems?.key,
+      });
 
       say(true, `Added “${newForm.name}”`);
       setShowAddModal(false);
@@ -247,14 +253,14 @@ export default function AdminPage() {
 
   const handleEdit = (beat) => {
     setEditingId(beat.id);
-    setEditForm(Object.fromEntries(TEXT_FIELDS.map((f) => [f, beat[f] ?? ''])));
+    setEditForm(/** @type {typeof EMPTY_FORM} */ (Object.fromEntries(TEXT_FIELDS.map((f) => [f, beat[f] ?? '']))));
   };
 
   const handleSaveEdit = async () => {
     const id = editingId;
     setBusyId(id);
     try {
-      await updateBeat(id, editForm);
+      await saveBeat('PATCH', { id, ...editForm });
       say(true, 'Saved');
       setEditingId(null);
       fetchBeatFiles();
@@ -265,21 +271,24 @@ export default function AdminPage() {
     }
   };
 
-  const handleReplaceFile = async (file, type) => {
+  // kind → [what the PATCH body calls it, use the public URL?, label]
+  const REPLACE = {
+    preview: ['previewUrl', true, 'Tagged preview'],
+    cover: ['coverUrl', true, 'Cover'],
+    mp3: ['mp3Key', false, 'Untagged MP3'],
+    wav: ['wavKey', false, 'WAV'],
+    stems: ['stemsKey', false, 'Stems'],
+  };
+
+  const handleReplaceFile = async (file, kind) => {
     const id = editingId;
     if (!file || !id) return;
-    if (type === 'stems' && !file.name.toLowerCase().endsWith('.zip')) return say(false, 'Stems must be a ZIP');
-    if (type === 'cover' && !file.type.startsWith('image/')) return say(false, 'Cover must be an image');
-
+    const [field, isPublic, label] = REPLACE[kind];
     setBusyId(id);
     try {
-      const url =
-        type === 'cover'
-          ? await uploadCover(file, `${id}-`)
-          : await uploadToR2(file, type === 'wav' ? 'wav' : type === 'stems' ? 'stems' : '');
-      const column = { audio: 'audiourl', wav: 'wav', stems: 'stems', cover: 'cover' }[type];
-      await updateBeat(id, { [column]: url });
-      say(true, `${type === 'audio' ? 'MP3' : type === 'wav' ? 'WAV' : type === 'stems' ? 'Stems' : 'Cover'} replaced`);
+      const { key, publicUrl } = await uploadFile(kind, file);
+      await saveBeat('PATCH', { id, [field]: isPublic ? publicUrl : key });
+      say(true, `${label} ${kind === 'preview' || kind === 'cover' ? 'replaced' : 'uploaded'}`);
       fetchBeatFiles();
     } catch (err) {
       say(false, `Upload failed: ${err.message}`);
@@ -374,6 +383,19 @@ export default function AdminPage() {
               ))}
             </select>
           </div>
+          {/* The to-do list for the untagged MP3 slot: until one is uploaded,
+              Basic buyers of that beat receive the tagged preview. */}
+          <button
+            onClick={() => {
+              setOnlyMissingMp3((v) => !v);
+              setCurrentPage(1);
+            }}
+            aria-pressed={onlyMissingMp3}
+            className={`ab-btn whitespace-nowrap ${onlyMissingMp3 ? 'ab-btn-active' : ''}`}
+            disabled={!missingMp3Count && !onlyMissingMp3}
+          >
+            No untagged MP3 ({missingMp3Count})
+          </button>
         </div>
 
         {/* Beats */}
@@ -402,8 +424,14 @@ export default function AdminPage() {
                           .join(' · ') || '—'}
                       </p>
                       <p className="ab-meta mt-1">
-                        {[beat.audiourl && 'MP3', beat.wav && 'WAV', beat.stems && 'Stems'].filter(Boolean).join(' · ') ||
-                          'No files'}
+                        {[beat.audiourl && 'Preview', beat.has?.mp3 && 'Untagged MP3', beat.has?.wav && 'WAV', beat.has?.stems && 'Stems']
+                          .filter(Boolean)
+                          .join(' · ') || 'No files'}
+                        {!beat.has?.mp3 && (
+                          <span className="ml-2 text-[var(--accent)]" title="Basic buyers get the tagged preview until one is uploaded">
+                            · No untagged MP3
+                          </span>
+                        )}
                       </p>
                     </div>
                     {beat.audiourl && (
@@ -449,9 +477,10 @@ export default function AdminPage() {
                       </div>
                       <div className="mt-6 flex flex-wrap gap-2">
                         {[
-                          ['audio', 'Replace MP3', '.mp3,audio/mpeg'],
-                          ['wav', 'Replace WAV', '.wav'],
-                          ['stems', 'Replace stems', '.zip'],
+                          ['preview', 'Replace tagged preview', '.mp3,audio/mpeg'],
+                          ['mp3', beat.has?.mp3 ? 'Replace untagged MP3' : 'Upload untagged MP3', '.mp3,audio/mpeg'],
+                          ['wav', beat.has?.wav ? 'Replace WAV' : 'Upload WAV', '.wav'],
+                          ['stems', beat.has?.stems ? 'Replace stems' : 'Upload stems', '.zip'],
                           ['cover', 'Replace cover', 'image/*'],
                         ].map(([type, label, accept]) => (
                           <label key={type} className="ab-btn ab-btn-sm cursor-pointer">
@@ -555,10 +584,11 @@ export default function AdminPage() {
             </div>
 
             <div className="mt-8 grid gap-5 sm:grid-cols-2">
-              <Dropzone label="MP3 *" hint="Drop MP3 or click" accept={ACCEPT.audio} file={audioFile} onFile={setAudioFile} error={formErrors.audio} />
-              <Dropzone label="Cover *" hint="Drop image or click" accept={ACCEPT.cover} file={coverFile} onFile={setCoverFile} error={formErrors.cover} preview={coverPreview} />
-              <Dropzone label="WAV" hint="Drop WAV or click" accept={ACCEPT.wav} file={wavFile} onFile={setWavFile} />
-              <Dropzone label="Stems ZIP" hint="Drop ZIP or click" accept={ACCEPT.stems} file={stemsFile} onFile={setStemsFile} />
+              <Dropzone label="Tagged preview MP3 * — public" hint="Drop MP3 or click" accept={ACCEPT.preview} file={previewFile} onFile={setPreviewFile} error={formErrors.preview} />
+              <Dropzone label="Cover * — public" hint="Drop image or click" accept={ACCEPT.cover} file={coverFile} onFile={setCoverFile} error={formErrors.cover} preview={coverPreview} />
+              <Dropzone label="Untagged MP3 — buyers only" hint="Drop MP3 or click" accept={ACCEPT.mp3} file={mp3File} onFile={setMp3File} />
+              <Dropzone label="WAV — buyers only" hint="Drop WAV or click" accept={ACCEPT.wav} file={wavFile} onFile={setWavFile} />
+              <Dropzone label="Stems ZIP — buyers only" hint="Drop ZIP or click" accept={ACCEPT.stems} file={stemsFile} onFile={setStemsFile} />
             </div>
 
             <div className="mt-8 flex items-center justify-end gap-3">

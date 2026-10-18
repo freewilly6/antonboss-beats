@@ -2,7 +2,7 @@
 //
 // Server-side gate for /admin. It must live in src/ — with a src/ directory
 // Next only looks here, and at the project root it never ran at all.
-// The admin API routes check the session themselves (lib/adminAuth.js); this
+// The admin API routes check the session themselves (lib/serverAuth.js); this
 // just keeps everyone else off the page.
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'

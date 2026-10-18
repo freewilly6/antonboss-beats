@@ -16,7 +16,8 @@ export const CartProvider = ({ children }) => {
 
       // Coerce beatId → number, filter out bad entries
       const cleaned = parsed
-        .map(item => ({
+        // Drop file URLs that older versions stored in the cart.
+        .map(({ audioUrl, wav, stems, ...item }) => ({
           ...item,
           beatId: Number(item.beatId),
         }))
@@ -40,10 +41,7 @@ export const CartProvider = ({ children }) => {
     title,        // ← optional subtitle
     cover,        // ← cover image URL
     licenseType,  // ← e.g. "Premium License"
-    price,        // ← numeric price
-    audioUrl,     // ← file_path
-    wav,
-    stems         // ← optional
+    price,        // ← numeric price (display only; the server re-prices)
   }) => {
     const realBeatId = Number(beatId)
 
@@ -70,9 +68,6 @@ export const CartProvider = ({ children }) => {
           cover,
           licenseType,
           price:       Number(price || 0),
-          audioUrl,
-          wav,
-          stems
         }
       ]
     })

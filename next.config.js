@@ -10,6 +10,8 @@ module.exports = {
 
   images: {
     remotePatterns: [
+      // Public bucket (beat-previews): new cover art.
+      { protocol: 'https', hostname: 'cdn.antonboss.com', pathname: '/**' },
       {
         protocol: 'https',
         hostname: 'spoezjwulzrwqcbokrsx.supabase.co',
@@ -23,6 +25,8 @@ module.exports = {
   async redirects() {
     return [
       // /beats is the compact list view now (pages/beats.js).
+      // Downloads live in the account library, served by /api/downloads.
+      { source: '/downloads', destination: '/account?tab=library', permanent: false },
       { source: '/beats/:beatId', destination: '/#beat-:beatId', permanent: true },
       { source: '/about', destination: '/#about', permanent: true },
       // There is no contact section any more — the footer carries the mailto.
