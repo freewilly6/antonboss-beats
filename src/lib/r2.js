@@ -21,9 +21,11 @@
 import { S3Client, GetObjectCommand, PutObjectCommand, HeadObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
-const endpoint =
-  process.env.R2_ENDPOINT ||
-  (process.env.R2_ACCOUNT_ID ? `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com` : undefined);
+// The account id has gone by a few names; NEXT_PUBLIC_R2_ACCOUNT_ID is what
+// production already has. Without an endpoint the SDK silently targets AWS.
+const accountId = process.env.R2_ACCOUNT_ID || process.env.NEXT_PUBLIC_R2_ACCOUNT_ID;
+const endpoint = process.env.R2_ENDPOINT || (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : undefined);
+if (!endpoint) console.error('[r2] Set R2_ENDPOINT or R2_ACCOUNT_ID: no Cloudflare R2 endpoint configured');
 
 export const r2 = new S3Client({
   region: 'auto',
@@ -32,6 +34,10 @@ export const r2 = new S3Client({
     accessKeyId: process.env.R2_ACCESS_KEY_ID || '',
     secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '',
   },
+  // Newer SDKs sign a CRC32 of the (empty) body into presigned PUTs, which
+  // then fails against the real upload. R2 doesn't need it.
+  requestChecksumCalculation: 'WHEN_REQUIRED',
+  responseChecksumValidation: 'WHEN_REQUIRED',
 });
 
 export const PUBLIC_BUCKET = process.env.R2_PUBLIC_BUCKET || 'beat-previews';

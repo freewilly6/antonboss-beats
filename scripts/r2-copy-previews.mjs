@@ -15,7 +15,7 @@
 //   node --env-file=.env.local scripts/r2-copy-previews.mjs --verify   # check every
 //        beat's preview exists in the public bucket (needs Supabase env vars)
 //
-// Needs: R2_ENDPOINT (or R2_ACCOUNT_ID), R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY,
+// Needs: R2_ENDPOINT (or R2_ACCOUNT_ID / NEXT_PUBLIC_R2_ACCOUNT_ID), R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY,
 // R2_PUBLIC_BUCKET, R2_PRIVATE_BUCKET; for --verify also
 // NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.
 
@@ -34,13 +34,17 @@ const env = (name, fallback) => {
   return v;
 };
 
-const endpoint = process.env.R2_ENDPOINT || `https://${env('R2_ACCOUNT_ID')}.r2.cloudflarestorage.com`;
+const endpoint =
+  process.env.R2_ENDPOINT ||
+  `https://${env('R2_ACCOUNT_ID', process.env.NEXT_PUBLIC_R2_ACCOUNT_ID)}.r2.cloudflarestorage.com`;
 const FROM = env('R2_PRIVATE_BUCKET', process.env.R2_BUCKET);
 const TO = env('R2_PUBLIC_BUCKET');
 const r2 = new S3Client({
   region: 'auto',
   endpoint,
   credentials: { accessKeyId: env('R2_ACCESS_KEY_ID'), secretAccessKey: env('R2_SECRET_ACCESS_KEY') },
+  requestChecksumCalculation: 'WHEN_REQUIRED',
+  responseChecksumValidation: 'WHEN_REQUIRED',
 });
 
 async function head(bucket, key) {
