@@ -797,10 +797,6 @@ body {
   --pill-rule: rgba(243, 240, 233, 0.2);
 }
 
-/* The logo artwork is drawn for paper; dark mode inverts it. */
-.ab-logo { filter: invert(1); }
-:root[data-theme="light"] .ab-logo { filter: none; }
-
 /* Glow reads as bloom on black and as blur on paper. Ink stays crisp. */
 :root[data-theme="light"] .ab-display,
 :root[data-theme="light"] .ab-glow,

@@ -113,7 +113,8 @@ export default function SiteMenu({ floating = false }) {
         onClick={() => setOpen(true)}
         aria-expanded={open}
         aria-controls="site-menu"
-        className={floating ? 'site-menu-trigger fixed right-5 top-5' : 'ab-btn'}
+        // Same white pill everywhere; on the scroll page it floats.
+        className={floating ? 'site-menu-trigger fixed right-5 top-5' : 'site-menu-trigger'}
         style={floating ? { zIndex: 'var(--z-chrome)' } : undefined}
       >
         <span className="site-menu-burger" aria-hidden="true">
@@ -142,7 +143,7 @@ export default function SiteMenu({ floating = false }) {
                 width={256}
                 height={256}
                 decoding="async"
-                className="ab-logo h-10 w-auto"
+                className="h-10 w-auto"
               />
             </Link>
             <button onClick={() => setOpen(false)} className="ab-btn">
