@@ -1,8 +1,7 @@
 // pages/signin.js
 //
 // One way in: Google. Laid out like the rest of the site — the standalone
-// nav, a display heading, square controls — rather than the old glass card
-// over a photo.
+// nav, a display heading, square controls — with the sign-in art beside it.
 
 import { useEffect, useState } from 'react';
 import Head from 'next/head';
@@ -10,12 +9,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import Navbar from '@/components/Navbar';
 import { supabase } from '@/lib/supabaseClient';
-
-const PERKS = [
-  ['Your library', 'Every beat you’ve licensed, with its MP3, WAV and stems.'],
-  ['Order history', 'Receipts and PayPal references, all in one place.'],
-  ['Quicker checkout', 'Stay signed in and go straight to paying.'],
-];
 
 function GoogleMark() {
   return (
@@ -102,17 +95,18 @@ export default function SignIn() {
           </p>
         </section>
 
-        <ol className="border-t border-[var(--fg-10)]">
-          {PERKS.map(([title, text], i) => (
-            <li key={title} className="flex gap-6 border-b border-[var(--fg-10)] py-6">
-              <span className="ab-label-dim w-6 pt-1">{String(i + 1).padStart(2, '0')}</span>
-              <div>
-                <p className="text-sm uppercase tracking-[0.2em]">{title}</p>
-                <p className="ab-body mt-2">{text}</p>
-              </div>
-            </li>
-          ))}
-        </ol>
+        {/* The art, desktop only as before. A <picture> rather than a hidden
+            <img>: browsers still download hidden images, and this GIF is
+            ~1.9 MB, so phones get a 1×1 placeholder and never fetch it. */}
+        <picture className="hidden md:block">
+          <source media="(min-width: 768px)" srcSet="/images/signin.gif" />
+          <img
+            src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+            alt="Sign in art"
+            decoding="async"
+            className="w-full border border-[var(--fg-10)] object-cover"
+          />
+        </picture>
       </main>
     </div>
   );
