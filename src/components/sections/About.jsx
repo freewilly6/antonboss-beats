@@ -11,8 +11,6 @@ import { PADS, loadKit, startSequencer, triggerPad } from '@/components/mpc/drum
 const loadMpc = () => import('@/components/mpc/MpcScene');
 const MpcScene = dynamic(loadMpc, { ssr: false, loading: () => null });
 
-// How hard each kind of hit shakes the machine while the pattern plays.
-const SHAKE = { kick: 1, snare: 0.6, clap: 0.6, tom: 0.45, rim: 0.3, hihat: 0.22 };
 
 const KEY_ROWS = ['1 2 3 4', 'Q W E R', 'A S D F', 'Z X C V'];
 
@@ -24,9 +22,6 @@ export default function About() {
     bpm: 92,
     playing: false,
     step: -1,
-    lastStepAt: 0,
-    shakeAt: 0,
-    shake: 0,
     lastLabel: '',
     lastPad: '',
     version: 0,
@@ -78,13 +73,6 @@ export default function About() {
       getBpm: () => live.bpm,
       onStep: (step, pads) => {
         live.step = step;
-        live.lastStepAt = performance.now();
-        // Shake by the heaviest hit on this step; an empty step lets it settle.
-        const weight = Math.max(0, ...pads.map((p) => SHAKE[PADS[p].sample] ?? 0.3));
-        if (weight) {
-          live.shake = weight;
-          live.shakeAt = live.lastStepAt;
-        }
         pads.forEach(flash);
         live.version++;
       },
