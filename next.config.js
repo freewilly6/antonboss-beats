@@ -22,7 +22,7 @@ module.exports = {
   // linked, so forward them to their sections rather than 404ing.
   async redirects() {
     return [
-      { source: '/beats', destination: '/#beats', permanent: true },
+      // /beats is the compact list view now (pages/beats.js).
       { source: '/beats/:beatId', destination: '/#beat-:beatId', permanent: true },
       { source: '/about', destination: '/#about', permanent: true },
       // There is no contact section any more — the footer carries the mailto.

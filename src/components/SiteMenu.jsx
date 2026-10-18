@@ -21,6 +21,7 @@ const PRIMARY = [
 ];
 
 const SECONDARY = [
+  { href: '/beats', label: 'Beat list' },
   { href: '/downloads', label: 'Downloads' },
   { href: '/license', label: 'Licensing' },
   { href: 'https://www.youtube.com/@AntonBoss-pd', label: 'YouTube', external: true },

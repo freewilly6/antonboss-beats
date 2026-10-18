@@ -4,6 +4,7 @@ import { Listbox } from '@headlessui/react';
 import { CheckIcon } from '@heroicons/react/20/solid';
 import CdCaseSelector from './cd/CdCaseSelector';
 import Reveal from './Reveal';
+import Link from 'next/link';
 
 export default function BeatList({ beats }) {
   const [searchTerm, setSearchTerm]       = useState('');
@@ -139,6 +140,10 @@ export default function BeatList({ beats }) {
               Clear Filters
             </button>
           )}
+
+          <Link href="/beats" className="ab-btn sm:ml-auto">
+            List view →
+          </Link>
         </div>
 
       </Reveal>

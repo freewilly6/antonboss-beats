@@ -17,7 +17,7 @@ export function BeatQueueProvider({ children }) {
       if (cancelled) return;
       const { data, error } = await supabase
         .from('BeatFiles')
-        .select('id,name,artist,audiourl,cover,genre,key,bpm,licenses')
+        .select('id,name,artist,audiourl,cover,genre,mood,key,bpm,licenses')
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -36,6 +36,9 @@ export function BeatQueueProvider({ children }) {
         cover:    b.cover     || '/images/beats/default-cover.png',
         artist:   b.artist    || 'Anton Boss',
         genre:    b.genre     || 'Unknown',
+        // Without this the shelf's mood filter and the list view's mood
+        // column had nothing to work with.
+        mood:     b.mood      || '',
         key:      b.key,
         bpm:      b.bpm,
         licenses: b.licenses  || [],
