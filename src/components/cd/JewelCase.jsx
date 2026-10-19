@@ -438,8 +438,11 @@ export default function JewelCase({
     dt = Math.min(dt, 0.05);
 
     // Selected case leans toward the pointer; the rest hold their shelf angle.
-    const tiltY = selected ? state.pointer.x * 0.35 : 0;
-    const tiltX = selected ? -state.pointer.y * 0.2 : 0;
+    // Open, it fills the frame, so only a hint of tilt: a full lean swings
+    // the lid's far edge toward the camera and off the canvas.
+    const lean = open ? 0.25 : 1;
+    const tiltY = selected ? state.pointer.x * 0.35 * lean : 0;
+    const tiltX = selected ? -state.pointer.y * 0.2 * lean : 0;
     const lift = hovered && !selected ? 0.08 : 0;
 
     g.position.x = damp(g.position.x, target.x, 6, dt);

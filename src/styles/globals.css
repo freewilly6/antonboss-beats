@@ -385,13 +385,7 @@ body {
     radial-gradient(ellipse at 20% 40%, rgba(255, 0, 80, 0.035), transparent 55%),
     radial-gradient(ellipse at 80% 60%, rgba(0, 180, 255, 0.04), transparent 55%),
     radial-gradient(ellipse at 50% 50%, rgba(40, 80, 255, 0.03), transparent 75%);
-  animation: vhs-chroma-drift 7s ease-in-out infinite;
-  will-change: transform;
-}
-
-@keyframes vhs-chroma-drift {
-  0%, 100% { transform: translateX(0);   opacity: 0.85; }
-  50%      { transform: translateX(3px); opacity: 1; }
+  /* Static: animating it read as the sides of the screen pulsing. */
 }
 
 .vhs-scanlines {
@@ -425,6 +419,8 @@ body {
   inset: auto 0 0 0;
   animation: vhs-tracking-sweep 11s linear infinite;
   will-change: transform, opacity;
+  /* Off: the band flashing across the top of the page read as a pulse. */
+  display: none;
 }
 
 @keyframes vhs-tracking-sweep {
@@ -442,7 +438,6 @@ body {
    the texture, so the page still reads as tape without moving. */
 @media (prefers-reduced-motion: reduce) {
   .vhs-grain,
-  .vhs-chroma,
   .vhs-scanlines,
   .vhs-tracking {
     animation: none;
